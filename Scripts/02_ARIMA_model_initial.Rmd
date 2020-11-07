@@ -1,0 +1,194 @@
+---
+title: "ARIMA_model_initial"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Here, we apply the ARMA model for the first wikipedia page - 2NE1_zh.wikipedia.org
+
+```{r workdirimp, echo=TRUE, message=FALSE, warning=FALSE}
+# basic imports
+library("fpp", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
+library("ggplot2", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
+```
+
+### Importing the data
+
+```{r dataimport, echo=TRUE, message=FALSE, warning=FALSE}
+setwd("D:/USMS/UChicago/STUDIES/Autumn 2020/MSCA 31006 1 Time Series Analysis and Forecasting/Final Project/Data")
+train_1 <- data.matrix(read.csv("train_1.csv", header = TRUE, row.names = 1,sep = ",",nrows = 1,skip =0))
+```
+
+### Preparing data to make it ready for time-series
+
+
+```{r tsready, echo=TRUE, message=FALSE, warning=FALSE}
+# removing column names
+dimnames(train_1) <- NULL
+
+# converting to array
+train_1 <- array(train_1)
+
+# checking the values
+head(train_1)
+
+# no. of ovservations
+length(train_1)
+```
+
+So, we see that there are 550 observations, i.e. number of views for the wikipedia page for 550 days from 1st July 2015 til 31st Dec 2016
+
+```{r ts, echo=TRUE, message=FALSE, warning=FALSE}
+# converting to time-series
+train_1_ts <- ts(train_1,frequency = 1)
+
+# checking first few values
+head(train_1_ts)
+
+# first view of time-series
+autoplot(train_1_ts)
+```
+
+From the first look of the time-series, we see that there are few outliers. The first obvious one is where the observation is > 400. Let's remove that.
+
+```{r removeoutlier1, echo=TRUE, message=FALSE, warning=FALSE}
+# removing the outlier
+train_1_ts <- train_1_ts[train_1_ts!=(train_1_ts[train_1_ts>400])]
+
+# checking the length
+length(train_1_ts)
+
+# converting back to ts
+train_1_ts <- ts(train_1_ts,frequency = 1)
+
+# plotting
+autoplot(train_1_ts)
+```
+
+We see, it is a bit better now, but few more outliers still left, let's remove them as well.
+
+```{r removeoutlier2, echo=TRUE, message=FALSE, warning=FALSE}
+# removing the outlier
+train_1_ts <- train_1_ts[! train_1_ts %in% train_1_ts[train_1_ts>150]]
+
+# checking the length
+length(train_1_ts)
+
+# converting back to ts
+train_1_ts <- ts(train_1_ts,frequency = 1)
+
+# plotting
+autoplot(train_1_ts)
+```
+
+Looks much better now. But we that the variance is increasing over time, so transformation of data might be needed to de-couple variance from the mean.
+
+Transforming the data -->
+
+```{r transform, echo=TRUE, message=FALSE, warning=FALSE}
+# finding ideal lambda
+BoxCox.lambda(train_1_ts)
+
+# transforming the data
+train_1_ts_transformed <- BoxCox(train_1_ts,lambda = -0.2875642)
+
+# visualizing again
+autoplot(train_1_ts_transformed)
+```
+
+Few things we can notice about the time-series ->
+
+1. It has a slight non-seasonal and long-term trend
+2. Might be a hint of cyclical component
+3. Seasonal component might be present.
+4. The mean does not seem constant over time
+
+
+Now, let's look at the ACF and PACF for this time-series
+
+```{r ACF, echo=TRUE, message=FALSE, warning=FALSE}
+tsdisplay(train_1_ts_transformed)
+```
+
+From the ACF/PACF we can see -->
+
+1. There is very slow decay of the ACF which indicates this data is NOT stationary. There is a hint of sinusoidal component as well
+2. There is decay of ACF and drop in PACF after lag 2, this might be an indication that we can apply AR model with order = 2 or 3
+
+Applying KPSS test to check stationarity -->
+
+```{r kpss, echo=TRUE, message=FALSE, warning=FALSE}
+kpss.test(train_1_ts_transformed)
+```
+
+The p-value = 0.01  
+=> We reject the NULL hypothesis  
+=> The data is NOT stationary
+
+So, to handle the non-seasonal non-stationarity, let's apply 1 order of non-seasonal differencing
+
+```{r nsdiff, echo=TRUE, message=FALSE, warning=FALSE}
+# applying 1st order differencing
+train_1_ts_transformed_diff <- diff(train_1_ts_transformed)
+
+# visualizing data
+tsdisplay(train_1_ts_transformed_diff)
+```
+
+Now, we can see from time-series plot the data appears stationary. From the ACF, we can see that there is no more slow decay, which indicates it is stationary.
+
+Let's confirm this with KPSS test
+
+```{r kpss2, echo=TRUE, message=FALSE, warning=FALSE}
+kpss.test(train_1_ts_transformed_diff)
+```
+
+Here, p-value = 0.1  
+=> The data is stationary
+
+Now, let's split our data to train and test
+
+```{r traintest, echo=TRUE, message=FALSE, warning=FALSE}
+views_train <- train_1_ts[1:535]
+views_test <- train_1_ts[536:545]
+```
+
+Applying auto.arima
+
+
+```{r autoarima, echo=TRUE, message=FALSE, warning=FALSE}
+auto.arima(views_train,lambda = -0.2875642, d=1)
+```
+
+Applying the model suggested by auto.arima
+
+```{r arima, echo=TRUE, message=FALSE, warning=FALSE}
+m1 <- Arima(views_train,lambda = -0.2875642,order=c(1,1,1))
+m1
+```
+
+Forecasting
+
+```{r forecast, echo=TRUE, message=FALSE, warning=FALSE}
+forecast(m1,h=10)
+```
+
+Visualizing the forecast
+
+```{r forecastv, echo=TRUE, message=FALSE, warning=FALSE}
+autoplot(train_1_ts) +
+  autolayer(forecast(m1,h=10))+
+  ggtitle("Forecasts for daily page views for wikipedia page - 2NE1_zh.wikipedia.org") +
+  xlab("Days") + ylab("Page views for wikipedia page - 2NE1_zh.wikipedia.org")
+```
+
+Checking model performance
+
+```{r performance, echo=TRUE, message=FALSE, warning=FALSE}
+accuracy(forecast(m1,h=10),views_test)
+```
+
