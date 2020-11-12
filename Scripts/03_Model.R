@@ -121,4 +121,3 @@ autoplot(forecast(m1,h=10))
 
 #checking the forecast
 accuracy(forecast(m1,h=10),diff(Google_test))
-
