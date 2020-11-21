@@ -238,8 +238,8 @@ page_2NE1_views_train1 <- page_2NE1_views[1:540]
 page_2NE1_views_test1 <- page_2NE1_views[541:550]
 
 # converting data to ts
-page_2NE1_views_train1 <- ts(page_2NE1_views_train1,frequency = 1)
-page_2NE1_views_test1 <- ts(page_2NE1_views_test1,frequency = 1)
+page_2NE1_views_train1 <- ts(page_2NE1_views_train1,frequency = 365.25)
+page_2NE1_views_test1 <- ts(page_2NE1_views_test1,frequency = 365.25)
 
 autoplot(page_2NE1_views_train1)
 
