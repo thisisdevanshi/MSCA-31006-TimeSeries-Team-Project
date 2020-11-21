@@ -1,5 +1,5 @@
 ---
-title: "ARIMA_model_initial"
+title: "ARIMA_ARFIMA_ETS_models"
 output: html_document
 ---
 
@@ -7,8 +7,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
-# Here, we apply the ARMA model for the first wikipedia page - 2NE1_zh.wikipedia.org
+### Here, we apply ARIMA, ETS and ARFIMA models for the first wikipedia page - 2NE1_zh.wikipedia.org
 
 ```{r workdirimp, echo=TRUE, message=FALSE, warning=FALSE}
 # basic imports
@@ -16,6 +15,8 @@ library("fpp", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
 library("ggplot2", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
 library("xts", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
 library("zoo", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
+library("arfima", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
+library("fracdiff", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
 ```
 
 ### Importing the data
@@ -25,8 +26,9 @@ setwd("D:/USMS/UChicago/STUDIES/Autumn 2020/MSCA 31006 1 Time Series Analysis an
 page_2NE1_views <- data.matrix(read.csv("train_1.csv", header = TRUE, row.names = 1,sep = ",",nrows = 1,skip =0))
 ```
 
-### Preparing data to make it ready for time-series
+### ARIMA model
 
+### Preparing data to make it ready for time-series
 
 ```{r tsready, echo=TRUE, message=FALSE, warning=FALSE}
 # removing column names
@@ -67,7 +69,7 @@ page_2NE1_views_ts_test
 Now, let's look at our train data.
 
 ```{r trainlook, echo=TRUE, message=FALSE, warning=FALSE}
-autoplot(page_2NE1_views_ts_train)
+autoplot(page_2NE1_views_ts_train,xlab = "Time")
 ```
 
 From the first look of the time-series, we see that there are few outliers. We see that after the occurence of this outlier, the level of the time-series did not change, hence this outlier **is not an intervention**. So, we can replace this value with the mean of all observations to maintain sanity.
@@ -180,6 +182,8 @@ Checking model performance
 accuracy(forecast(m1,h=10),page_2NE1_views_ts_test)
 ```
 
+### Naive Models
+
 ```{r others, echo=TRUE, message=FALSE, warning=FALSE}
 Model_Mean <- meanf(page_2NE1_views_ts_train, h=10) 
 Model_Naive <- naive(page_2NE1_views_ts_train, h=10) 
@@ -212,6 +216,8 @@ qqline(m1$residuals)
 
 The residuals seem to be fairly normally distributed with few outliers.
 
+### ETS model
+
 Now, let's try forecasting with ETS model and see how it turns out.
 
 ```{r ets, echo=TRUE, message=FALSE, warning=FALSE}
@@ -221,3 +227,103 @@ accuracy(forecast(m2,h=10),page_2NE1_views_ts_test)
 ```
 
 We see that the test RMSE is kind of between that of ARMA model and the naive models.
+
+### ARFIMA model
+
+```{r arfima2, echo=TRUE, message=FALSE, warning=FALSE}
+#arfima(page_2NE1_views_ts1)
+
+# splitting to train and test
+page_2NE1_views_train1 <- page_2NE1_views[1:540]
+page_2NE1_views_test1 <- page_2NE1_views[541:550]
+
+# converting data to ts
+page_2NE1_views_train1 <- ts(page_2NE1_views_train1,frequency = 1)
+page_2NE1_views_test1 <- ts(page_2NE1_views_test1,frequency = 1)
+
+autoplot(page_2NE1_views_train1)
+
+```
+
+From the first look of the time-series, we see that there are few outliers. We see that after the occurence of this outlier, the level of the time-series did not change, hence this outlier **is not an intervention**. So, we can replace this value with the mean of all observations to maintain sanity.
+
+We see, it is a bit better now, but few more outliers still left, let's treat them similarly as they do not cause any change in the level of the data.
+
+```{r outlier3, echo=TRUE, message=FALSE, warning=FALSE}
+# replacing the outlier with mean
+page_2NE1_views_train1[page_2NE1_views_train1>=150]
+
+page_2NE1_views_train1[page_2NE1_views_train1>150] <- mean(page_2NE1_views_train1[!page_2NE1_views_train1>=150])
+
+# plotting
+autoplot(page_2NE1_views_train1)
+```
+
+Looks much better now. But we that the variance is increasing over time, so transformation of data might be needed to de-couple variance from the mean.
+
+Transforming the data -->
+
+```{r transform1, echo=TRUE, message=FALSE, warning=FALSE}
+# finding ideal lambda
+BoxCox.lambda(page_2NE1_views_train1)
+
+# transforming the data
+page_2NE1_views_train1_transformed <- BoxCox(page_2NE1_views_train1,lambda = -0.3565587)
+
+# visualizing again
+autoplot(page_2NE1_views_train1_transformed)
+```
+
+Few things we can notice about the time-series ->
+
+1. It has a slight non-seasonal and long-term trend
+2. Might be a hint of cyclical component
+3. Seasonal component might be present.
+4. The level does not seem constant over time
+
+
+Now, let's look at the ACF and PACF for this time-series
+
+```{r ACF1, echo=TRUE, message=FALSE, warning=FALSE}
+tsdisplay(page_2NE1_views_train1_transformed)
+```
+
+From the ACF, we can see that it is decaying slowly and is decaying slower than our expectations. This might be an indication of this time-series being a long-memory time series where the observation from a long, long time in the past is still affecting our current observation. So, let's try to fit Arfima model where we apply fractional differencing instead of differencing by 1 or 2, in order to create a simpler model and better predicion.
+
+
+```{r arfima, echo=TRUE, message=FALSE, warning=FALSE}
+# checking ARFIMA model
+arfima(page_2NE1_views_train1_transformed)
+```
+
+Here, we see a differencing of 0.209218 is required for this data.
+
+```{r arfima1, echo=TRUE, message=FALSE, warning=FALSE}
+# fitting the ARFIMA model
+m3 <- arfima(page_2NE1_views_train1_transformed)
+summary(m3)
+```
+
+```{r fcast, echo=TRUE, message=FALSE, warning=FALSE}
+# plotting the residuals time-series
+plot.ts(resid(m3)[[1]])
+
+# plotting the residuals ACF
+acf(resid(m3)[[1]])
+
+# making the forecasts
+forescasts_m3 <- predict(m3,n.ahead = 10)
+
+# reverting the forecasts by applying inverse BoxCox transformation
+forescasts_m3_reverted <- InvBoxCox(forescasts_m3[[1]]$Forecast, -0.3565587)
+forescasts_m3_reverted
+
+# checking the accuracy
+accuracy(forescasts_m3_reverted,page_2NE1_views_test1)
+```
+
+Here, we see the residuals are almost white noise.
+
+Looking at the test RMSE, we see that its 14.97267 for our model of ARFIMA(0,0.2092178,0), which is a bit more than that of ARIMA(1,1,1) -> 13.97199
+
+So, we see that by making our model a little simpler, by removing the AR part and MA part and applying fractional differencing, we are getting almost the same forecasts.
