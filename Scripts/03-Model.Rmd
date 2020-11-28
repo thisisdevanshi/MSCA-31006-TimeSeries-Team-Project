@@ -1,0 +1,211 @@
+---
+title: "Web Traffic Time Series Forecasting"
+author: "Devanshi Verma"
+date: "11/27/2020"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 5
+---
+
+### Overview
+
+#### Description
+
+We decided to work on one of the most burning time series problem of today’s day and era, “predicting web traffic”. We believe that this forecasting can help website servers a great deal in effectively handling outages. The technique we implemented can be extended to diverse applications in financial markets, weather forecasts, audio and video processing. Not just that, understanding your website’s traffic trajectory can open up business opportunities too!
+
+#### Dataset
+The dataset consists of 145k time series representing the number of daily page views of different Wikipedia articles, starting from July 1st, 2015 up until September 10th, 2017 (804 data points). The goal is to forecast the daily views between September 13th, 2017 and November 13th, 2017 (64 data points) for each article in the dataset.Traditional moving averages, ARIMA based techniques
+
+
+Let's import the important libraries
+```{r, message = FALSE, warning = FALSE}
+# visualization
+library('ggplot2') 
+
+# data manipulation
+library('dplyr')
+library('readr')
+library('imputeTS')
+
+
+#time series
+library('fpp')
+library('forecast')
+library('xts')
+library('zoo')
+```
+
+### Data Preparation
+A dataset like this would have a lot of interventions because the web traffic views are dependent on external factors and can spike up on one day and return to the same level in a while. So let's start with searching a nice stationary model wave where we can use our ARIMA methods, and then we can start working on interventions
+
+```{r, message = FALSE, warning = FALSE}
+# importing the dataset
+train_1 <- read.csv("~/Desktop/UChicago/Quarters/03-Quarters/Data/TS/web-traffic-time-series-forecasting/train_1.csv", header = TRUE, row.names = 1,sep = ",",skip =0)
+```
+
+
+We found one dataset that appears more or less stationary, let's have a look
+
+```{r, message = FALSE, warning = FALSE}
+# importing the dataset
+ASCII <- data.matrix(train_1[c("ASCII_zh.wikipedia.org_all-access_spider"),])
+dimnames(ASCII)<-NULL
+ASCII<-array(ASCII)
+plot(ASCII,type='l')
+```
+
+The time series appears to have increasing trend with no signs of seasonality 
+
+Let's create a time series object and split the data into test and train. We would use data from 2015-07-01 to 2016-08-31 as train data and data from 2016-09-01 to 2016-12-31 as test data.
+
+```{r, message = FALSE, warning = FALSE}
+time_index <- seq(from = as.POSIXct("2015-07-01"), to = as.POSIXct("2016-12-31"), by = "day")
+ASCII_ts <- xts(ASCII, order.by =time_index ,frequency = 365.25)
+tsdisplay(ASCII_ts,ylab="ASCII daily traffic",xlab="Day")
+ASCII_train<-ASCII_ts['2015-07-01/2016-09-30']
+ASCII_test<-ASCII_ts['2016-10-01/2016-12-31']
+tsdisplay(ASCII_train,ylab="ASCII daily traffic",xlab="Day")
+tsdisplay(ASCII_test,ylab="ASCII daily traffic",xlab="Day")
+length(ASCII_test)
+```
+
+
+We can see from ACF and PACF that the dataset isn't dying down fast which means that the dataset isn't stationary and hence we would need differencing. Let's have a look at that as well.
+
+
+Let's look if we need to do Box Cox transformation to decouple mean and variance
+```{r, message = FALSE, warning = FALSE}
+BoxCox.lambda(ASCII_train)
+```
+
+Yes, we need to perform a transformation with lambda = 0.3922381
+
+Also confirming our assumption that the data isn't stationary
+```{r, message = FALSE, warning = FALSE}
+kpss.test(ASCII_train)
+```
+
+
+Since the p value is less than 0.05, the data isn't stationary
+
+Let's apply one level of differencing and check
+
+```{r, message = FALSE, warning = FALSE}
+ASCII_train_boxcox<-ASCII_train %>% BoxCox(lambda = BoxCox.lambda(ASCII_train))
+ASCII_train_diff <- diff(ASCII_train_boxcox)
+kpss.test(ASCII_train_diff)
+tsdisplay(ASCII_train_diff)
+```
+
+### Naive Forecasts
+
+The data is better now, and the looks stationary. Let's start with naive forecasts first before we movie into ARIMA model
+
+```{r, message = FALSE, warning = FALSE}
+#forecast horizon
+h<-92
+#naive forecasts
+ASCII_train_new<-ts(ASCII_ts['2015-07-01/2016-09-30'])
+ASCII_test_new<-ts(ASCII_ts['2016-10-01/2016-12-31'])
+
+#evaluating the models
+Model_Mean <- meanf(ASCII_train_new, h) 
+Model_Naive <- naive(ASCII_train_new, h) 
+Model_Drift <- rwf(ASCII_train_new, h, drift=TRUE)
+
+#Naive forecast
+autoplot(ASCII_train_new) +
+  autolayer(Model_Mean$mean, series="Mean") +
+  autolayer(Model_Naive$mean, series="Naive") +
+  autolayer(Model_Drift$mean, series="Drift") +
+  ggtitle("Forecasts for daily ASCII Wikepedia Page") +
+  xlab("Days") + ylab("ASCII traffic")
+```
+
+Let's have a look at the metrics - Out of sample metrics-test
+
+
+```{r, message = FALSE, warning = FALSE}
+accuracy(Model_Mean,ASCII_test)
+accuracy(Model_Naive,ASCII_test)
+accuracy(Model_Drift,ASCII_test)
+```
+
+It can be seen from above metrics that drift is performing the best because the trend is increasing but not a stable model as the assumption is that it would always increase. Let's have a look at the ARIMA model
+
+### ARIMA Model
+
+```{r, message = FALSE, warning = FALSE}
+auto.arima(ASCII_train,seasonal = TRUE,lambda = 'auto')
+m1<-Arima(ASCII_train,lambda = 'auto',order=c(2,1,3),include.drift = TRUE)
+checkresiduals(m1)
+```
+We can see that residuals have no autocorrelation and appear stationary. Let's have a look at metrics
+
+```{r, message = FALSE, warning = FALSE}
+autoplot(forecast(m1,h=92))
+accuracy(forecast(m1,h=92),ASCII_test)
+```
+Looking at the metrics it has the lowest Train and a lower RMSE as compared to the other models.
+
+#### EACF - ARIMA
+
+Let's check if there are better model using the Extended Auto correlation function
+```{r, message = FALSE, warning = FALSE}
+source("~/Desktop/UChicago/Quarters/03-Quarters/03-31006-TimeSeries/03-Week/eacf.r")
+#differencing and box cox transforming the training data 
+ASCII_train_new_boxcox<-ASCII_train_new %>% BoxCox(lambda = BoxCox.lambda(ASCII_train_new))
+ASCII_train_new_diff <- diff(ASCII_train_new_boxcox)
+eacf(ASCII_train_new_diff)
+```
+
+Note: We don't wish to complicate the model and hence would keep pmax and qmax to be 2,2
+Trying different models from above matrix
+p=0,q=1
+p=0,q=2
+p=1,q=2
+p=2,q=1
+p=2,q=2
+
+```{r, message = FALSE, warning = FALSE}
+m2<-Arima(ASCII_train,lambda = 'auto',order=c(0,1,1),include.drift = TRUE)
+m3<-Arima(ASCII_train,lambda = 'auto',order=c(0,1,2),include.drift = TRUE)
+m4<-Arima(ASCII_train,lambda = 'auto',order=c(1,1,2),include.drift = TRUE)
+m5<-Arima(ASCII_train,lambda = 'auto',order=c(2,1,1),include.drift = TRUE)
+m6<-Arima(ASCII_train,lambda = 'auto',order=c(2,1,2),include.drift = TRUE)
+cbind(m1$aicc,m2$aicc,m3$aicc,m4$aicc,m5$aicc,m6$aicc)
+
+```
+
+By Aicc values, model1 is the best. Therefore we would go with auto arima model.
+
+### Cross Validation
+
+Let's use the best model found i.e. ARIMA(2,1,3)
+```{r, message = FALSE, warning = FALSE}
+m7 <- function(x, h){forecast(Arima(x, order=c(2,1,3),lambda = 'auto',include.drift=TRUE), h=h)}
+error_1 <- tsCV(ASCII_train, m7, h=1)
+error_2 <- tsCV(ASCII_train, m7, h=1, window = 12) # Rolling/Sliding Window
+```
+
+Let's have look at the errors
+
+```{r, message = FALSE, warning = FALSE}
+autoplot(error_1, series = 'Expanding Window') +
+  autolayer(error_2, series = 'Rolling Window') 
+```
+
+Let's have a look at the values as well
+
+```{r, message = FALSE, warning = FALSE}
+print(sqrt(mean(error_1^2, na.rm=TRUE))) 
+print(sqrt(mean(error_2^2, na.rm=TRUE))) 
+```
+
+
+
+
+
+
