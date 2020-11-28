@@ -1,0 +1,281 @@
+---
+title: "Web Traffic Time Series Forecasting - Spectral_Analysis_TBATS"
+author: "Prafulla Ranjan Dash"
+date: "27th Nov 2020"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 5
+---
+
+### Overview
+
+#### Description
+
+We decided to work on one of the most burning time series problem of today's day and era, "predicting web traffic". We believe that this forecasting can help website servers a great deal in effectively handling outages. The technique we implemented can be extended to diverse applications in financial markets, weather forecasts, audio and video processing. Not just that, understanding your website's traffic trajectory can open up business opportunities too.
+
+#### Dataset
+The dataset consists of 145k time series representing the number of daily page views of different Wikipedia articles, starting from July 1st, 2015 up until September 10th, 2017 (804 data points).
+
+#### For these models, I have focused on the **Legal_high** wikipedia page
+
+## Spectral Analysis
+
+#### Here, we try and apply Spectral Analysis for detecting the seasonal patterns of our data.
+
+```{r workdirimp, echo=TRUE, message=FALSE, warning=FALSE}
+# basic imports
+library("fpp", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
+library("ggplot2", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
+library("stats", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
+library("zoo", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
+library("TSA", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
+```
+
+#### Importing the data
+
+```{r dataimport, echo=TRUE, message=FALSE, warning=FALSE}
+setwd("D:/USMS/UChicago/STUDIES/Autumn 2020/MSCA 31006 1 Time Series Analysis and Forecasting/Final Project/Data")
+page_Legalhigh_views <- data.matrix(read.csv("train_1.csv", header = TRUE, row.names = 1,sep = ",",nrows = 1,skip =87))
+```
+
+#### Preparing data to make it ready for time-series
+
+```{r dataprepare, echo=TRUE, message=FALSE, warning=FALSE}
+# removing column names
+dimnames(page_Legalhigh_views) <- NULL
+
+# converting to array
+page_Legalhigh_views <- array(page_Legalhigh_views)
+
+# checking the values
+head(page_Legalhigh_views)
+
+# no. of ovservations
+length(page_Legalhigh_views)
+```
+
+#### Splitting to train and test
+
+```{r split, echo=TRUE, message=FALSE, warning=FALSE}
+# splitting to train and test
+page_Legalhigh_views_train <- page_Legalhigh_views[1:540]
+page_Legalhigh_views_test <- page_Legalhigh_views[541:550]
+
+# converting data to ts
+page_Legalhigh_views_train <- ts(page_Legalhigh_views_train,frequency = 365.25)
+page_Legalhigh_views_test <- ts(page_Legalhigh_views_test,frequency = 365.25)
+
+# plotting the time-series
+autoplot(page_Legalhigh_views_train)
+```
+
+From the first look of the TS, we can see that there are few values which are kind of deviating from the normal, but let's NOT consider them as outliers.
+
+We also suspect some kind of **seasonal behaviour** here, with certain periodicities that are repeating themselves. We will try to represent them as a summation of different sine and cosine waves by using **Fourier Transformation**. This signal is also **moving very fast**.
+
+So, before that, we have to ensure that make our data **stationary** by stabilizing it's variance and applying any **non-seasonal differencing** if required.
+
+Looking at this data, we might have to apply **Box-Cox transformation** to **decouple the mean and variance**.
+
+```{r BoxCox, echo=TRUE, message=FALSE, warning=FALSE}
+# finding ideal lambda
+BoxCox.lambda(page_Legalhigh_views_train)
+```
+
+Surprisingly, the ideal lambda value for this is 1, which means it **does not require** box-cox transformation.
+
+Now, let's check for it's stationarity by looking at the ACF and PACF
+
+```{r ACF, echo=TRUE, message=FALSE, warning=FALSE}
+tsdisplay(page_Legalhigh_views_train,lag.max = 25)
+```
+
+So, from ACF we see that there is slow exponential decay, which indicates that there is some correlation in our data and the time-series is **NOT stattionary**. We can also apply KPSS test to check stationarity.
+
+```{r kpss1, echo=TRUE, message=FALSE, warning=FALSE}
+kpss.test(page_Legalhigh_views_train)
+```
+
+The p-value = 0.01  
+=> We reject the NULL hypothesis  
+=> The data is **NOT stationary**
+
+Let's apply one order of **non-seasonal differencing**.
+
+```{r nsdiff, echo=TRUE, message=FALSE, warning=FALSE}
+# applying 1st order differencing
+page_Legalhigh_views_train_diff <- diff(page_Legalhigh_views_train)
+
+# visualizing data
+tsdisplay(page_Legalhigh_views_train_diff,lag.max = 25)
+```
+
+So, from ACF we can see that it's almost white noise and there is not that much correlation between the data. So the data is stationary. Doing KPSS test to confirm.
+
+```{r kpss2, echo=TRUE, message=FALSE, warning=FALSE}
+kpss.test(page_Legalhigh_views_train_diff)
+```
+The p-value = 0.1  
+=> We fail reject the NULL hypothesis  
+=> The data **is stationary**
+
+Also, given that there is a drop in ACF after lag 1 and the PACF is slow decay, MA model with order = 2 might be one of the models suitable for representing this data.
+
+Now, let's plot a **periodogram** to check what are the fundamental frequencies that are contributing to our signal.
+
+```{r periodogram, echo=TRUE, message=FALSE, warning=FALSE}
+periodogram(page_Legalhigh_views_train_diff)
+```
+
+From the above **periodogram**, where we have represented our data in **frequency domain**, we can see that this signal is mostly dictated by **high frequencies** as we have significant spikes for the spectrum in the high frequency ranges. Also, this signal has some cyclical patterns and it is **moving very quickly**.
+
+Now, looking at the spectrum, which represents the same frequencies but in a continuous manner.
+
+```{r spectrum, echo=TRUE, message=FALSE, warning=FALSE}
+spectrum(page_Legalhigh_views_train_diff)
+```
+
+The spectrum of our data also tells a similar story.
+
+Now, let's zoom in a bit into our periodogram.
+
+```{r periodogramzoom, echo=TRUE, message=FALSE, warning=FALSE}
+periodogram(page_Legalhigh_views_train_diff,xlim = c(0.2,0.4))
+```
+
+From here, we can see that there are certain frequencies that are contributing more to our signal than others.
+
+Let's what these are.
+
+```{r fundfreq1, echo=TRUE, message=FALSE, warning=FALSE}
+# storing the periodogram object
+page_Legalhigh_periodogram <- periodogram(page_Legalhigh_views_train_diff)
+
+# storing the top 10 spectrums
+high_spectrum <- head(sort(page_Legalhigh_periodogram$spec,decreasing = TRUE),10)
+high_spectrum
+```
+
+So, we we can see these are the top 10 spectrums that we have in our data. Let's find their corresponding frequencies.
+
+```{r fundfreq2, echo=TRUE, message=FALSE, warning=FALSE}
+high_spectrum_indices <- c()
+
+# storing the high spectrum indices
+for (i in seq(1:length(high_spectrum))) {
+  high_spectrum_indices <- append(high_spectrum_indices,match(high_spectrum[i]
+                                                              ,page_Legalhigh_periodogram$spec))
+}
+
+fundamental_freq <- c()
+
+# storing the frequencies corresponding to the high spectrums
+for (i in seq(1:length(high_spectrum_indices))) {
+  fundamental_freq <- append(fundamental_freq,page_Legalhigh_periodogram$freq[high_spectrum_indices[i]])
+}
+
+# the fundamental frequencies
+fundamental_freq
+
+# finding and storing the time periods
+time_periods <- round(1/fundamental_freq,0)
+time_periods
+```
+
+So, few things to notice here --
+
+1. The frequency that is **contributing the most** to this signal is **0.3925926**
+2. If we look at the corresponding time-periods to the high contributing frequencies, then we can see that they are time-periods of **2 days and 3 days**. This means, that this signal has a dynamic pattern that is repeating itself every 2 days and 3 days.
+
+This is also in accordance with **Nyquist** frequency. Since our sampling frequency is **1 day**, we can detect a cycle that is **atleast 2 days** in length. We **cannot detect** a cycle that is **less** than 2 days.
+
+Now, let's apply **Regression with ARIMA error** model here, where the regression is nothing but the **Fourier transformation** of the signal so that we can capture this signal deterministically. And then ARIMA can come in and capture the rest which was not captured by Fourier transformation. We will take the maximum number of fourier terms as 3.
+
+
+```{r fourier, echo=TRUE, message=FALSE, warning=FALSE}
+m1 <- auto.arima(page_Legalhigh_views_train, xreg = fourier(page_Legalhigh_views_train,K=3),seasonal = FALSE,stationary =FALSE)
+summary(m1)
+```
+
+Here, we see auto.arima has chosen the model **Regression with ARIMA(2,1,3) errors**. This model has **train RMSE of 6.774151**
+
+Let's forecast for 10 days using this.
+
+```{r fourieraccuracy, echo=TRUE, message=FALSE, warning=FALSE}
+# forecasting
+forecast_m1 <- forecast(m1,xreg = fourier(page_Legalhigh_views_train_diff,3,h=10))
+
+# calculating the accuracy
+accuracy(forecast_m1$mean[1:10],page_Legalhigh_views_test)
+
+# plotting the forecasts
+autoplot(forecast_m1)
+```
+
+Test RMSE = 6.789675, which is pretty good and close to train RMSE  
+=> model is fitting well, its not overfitting on underfitting.
+
+Now, let's checkout the residuals for this model
+
+```{r m1residuals, echo=TRUE, message=FALSE, warning=FALSE}
+checkresiduals(m1)
+
+#checking mean of the residuals
+mean(m1$residuals)
+```
+
+1. From the ACF, we can see that the ACF almost resembles white noise because most of the spikes are NOT significant. This indicates that our model was able to capture the systematic patterns that we had in our data.
+
+2. Looking at the time-series of the residuals, the mean is almost = 0, but it can be more closer to zero.
+
+3. Looking at the histogram of the residuals, we see its fairly mormally distributed with few outliers.
+
+4. The p-value obtained from Ljung-Box test for the residuals also confirms that the the residuals are indeed independently distributed.
+
+## TBATS model
+
+Now, we have seen that how the Regression (Fourier transform) with ARIMA errors has performed. We have also seen that our signal does have multiple seasonal components of 2 days and 3 days. So, in order to better capture these patterns, let's go with something called TBATS model which stands for - 
+
+**T**rigonometric terms for seasonality  
+**B**ox Cox transformations for heterogeneity  
+**A**RMA errors for short term dynamics  
+**T**rend (possibly damped)  
+**S**easonal (including multiple and non integer periods)  
+
+```{r tbats, echo=TRUE, message=FALSE, warning=FALSE}
+m2 <- tbats(page_Legalhigh_views_train)
+m2
+```
+
+Just dissecting this model that was chosen - 
+
+1. The model has applied Box-Cox transformation of lambda = 0.01 which is very close to log transformation  
+2. The ARMA error is {0,0}  
+3. A damping parametr of 0.878 has been applied
+
+Forecasting for 10 days with this model -
+
+```{r tbatsforecast, echo=TRUE, message=FALSE, warning=FALSE}
+forecast_m2 <- forecast(m2,h=10)
+accuracy(forecast_m2$mean[1:10],page_Legalhigh_views_test)
+autoplot(forecast_m2)
+```
+
+Now, let's check how the residuals for this model look
+
+```{r m2residuals, echo=TRUE, message=FALSE, warning=FALSE}
+checkresiduals(m2)
+mean(m2$errors)
+```
+
+1. From the ACF, we can see that the ACF almost resembles white noise because most of the spikes are NOT significant. This indicates that our model was able to capture the systematic patterns that we had in our data.
+
+2. Looking at the time-series of the residuals, the mean is almost =  0, this means our model is not biased.
+
+3. Looking at the histogram of the residuals, we see its fairly mormally distributed with one or two outliers.
+
+4. The p-value obtained from Ljung-Box test for the residuals also confirms that the the residuals are indeed independently distributed.
+
+We also see that the mean of the residuals is closer to zero for TBATS model than for Regression with ARIMA errors.

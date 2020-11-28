@@ -1,13 +1,24 @@
 ---
-title: "ARIMA_ARFIMA_ETS_models"
-output: html_document
+title: "Web Traffic Time Series Forecasting - ARIMA_ARFIMA_ETS_models"
+author: "Prafulla Ranjan Dash"
+date: "27th Nov 2020"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 5
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+### Overview
 
-### Here, we apply ARIMA, ETS and ARFIMA models for the first wikipedia page - 2NE1_zh.wikipedia.org
+#### Description
+
+We decided to work on one of the most burning time series problem of today's day and era, "predicting web traffic". We believe that this forecasting can help website servers a great deal in effectively handling outages. The technique we implemented can be extended to diverse applications in financial markets, weather forecasts, audio and video processing. Not just that, understanding your website's traffic trajectory can open up business opportunities too.
+
+#### Dataset
+The dataset consists of 145k time series representing the number of daily page views of different Wikipedia articles, starting from July 1st, 2015 up until September 10th, 2017 (804 data points).
+
+#### For these models, I have focused on the **2NE1** wikipedia page
 
 ```{r workdirimp, echo=TRUE, message=FALSE, warning=FALSE}
 # basic imports
@@ -19,7 +30,7 @@ library("arfima", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
 library("fracdiff", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
 ```
 
-### Importing the data
+#### Importing the data
 
 ```{r dataimport, echo=TRUE, message=FALSE, warning=FALSE}
 setwd("D:/USMS/UChicago/STUDIES/Autumn 2020/MSCA 31006 1 Time Series Analysis and Forecasting/Final Project/Data")
@@ -28,7 +39,7 @@ page_2NE1_views <- data.matrix(read.csv("train_1.csv", header = TRUE, row.names 
 
 ### ARIMA model
 
-### Preparing data to make it ready for time-series
+#### Preparing data to make it ready for time-series
 
 ```{r tsready, echo=TRUE, message=FALSE, warning=FALSE}
 # removing column names
@@ -231,8 +242,6 @@ We see that the test RMSE is kind of between that of ARMA model and the naive mo
 ### ARFIMA model
 
 ```{r arfima2, echo=TRUE, message=FALSE, warning=FALSE}
-#arfima(page_2NE1_views_ts1)
-
 # splitting to train and test
 page_2NE1_views_train1 <- page_2NE1_views[1:540]
 page_2NE1_views_test1 <- page_2NE1_views[541:550]
@@ -242,7 +251,6 @@ page_2NE1_views_train1 <- ts(page_2NE1_views_train1,frequency = 365.25)
 page_2NE1_views_test1 <- ts(page_2NE1_views_test1,frequency = 365.25)
 
 autoplot(page_2NE1_views_train1)
-
 ```
 
 From the first look of the time-series, we see that there are few outliers. We see that after the occurence of this outlier, the level of the time-series did not change, hence this outlier **is not an intervention**. So, we can replace this value with the mean of all observations to maintain sanity.
