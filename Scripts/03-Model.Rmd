@@ -46,6 +46,30 @@ A dataset like this would have a lot of interventions because the web traffic vi
 train_1 <- read.csv("~/Desktop/UChicago/Quarters/03-Quarters/Data/TS/web-traffic-time-series-forecasting/train_1.csv", header = TRUE, row.names = 1,sep = ",",skip =0)
 ```
 
+Let's have a look at different time series available
+
+```{r, message = FALSE, warning = FALSE}
+# importing the dataset
+Google <- data.matrix(train_1[c("Google_zh.wikipedia.org_all-access_spider"),])
+dimnames(Google)<-NULL
+Google<-array(Google)
+time_index <- seq(from = as.POSIXct("2015-07-01"), to = as.POSIXct("2016-12-31"), by = "day")
+Google_ts <- xts(Google, order.by =time_index ,frequency = 365.25)
+autoplot(Google_ts)
+```
+
+We can see that the data more or less appears stationary but we have a spike im 2015 December. This is a very common  pattern we can see when we have web traffic data since it's heavily influenced by external factors. These spikes are called as interventions, and we have a separate notebooks as to how to deal with these interventions. In this notebook we would be dealing only with a data that appears more or less stationary. Let's have a look at other cases.
+
+```{r, message = FALSE, warning = FALSE}
+# importing the dataset
+IPhone <- data.matrix(train_1[c("IPhone_zh.wikipedia.org_all-access_spider"),])
+dimnames(IPhone)<-NULL
+IPhone<-array(IPhone)
+time_index <- seq(from = as.POSIXct("2015-07-01"), to = as.POSIXct("2016-12-31"), by = "day")
+IPhone_ts <- xts(IPhone, order.by =time_index ,frequency = 365.25)
+autoplot(IPhone_ts)
+```
+Then we have a data like this i.e. for Iphone wikipedia page. In this case intervention actually changes the level, I guess it probably because, Apple events usually occur in September of each year and that changes the pattern. Apple also has events in early March which is also a contributing factor. Therefore, such a time series isn't stationary and the interventions in this case change the level of the TS as well. 
 
 We found one dataset that appears more or less stationary, let's have a look
 
