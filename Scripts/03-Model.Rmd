@@ -35,6 +35,7 @@ library('fpp')
 library('forecast')
 library('xts')
 library('zoo')
+library(prophet)
 ```
 
 ### Data Preparation
@@ -181,6 +182,27 @@ cbind(m1$aicc,m2$aicc,m3$aicc,m4$aicc,m5$aicc,m6$aicc)
 
 By Aicc values, model1 is the best. Therefore we would go with auto arima model.
 
+### Holt Winters
+
+```{r, message = FALSE, warning = FALSE}
+m_hw <- holt(ASCII_train,h=92) 
+autoplot(m_hw)
+m_hw_damp <- holt(ASCII_train,h=92,damped = TRUE) 
+autoplot(m_hw_damp)
+```
+```{r, message = FALSE, warning = FALSE}
+accuracy(m_hw)
+accuracy(m_hw_damp)
+```
+
+```{r, message = FALSE, warning = FALSE}
+checkresiduals(m_hw)
+```
+```{r, message = FALSE, warning = FALSE}
+checkresiduals(m_hw_damp)
+```
+The Ljung Box test tells us that residuals are correlated as the pvalues are 0.05 means Failure to reject null hypothesis which means that the model isn't a good fit.
+
 ### Cross Validation
 
 Let's use the best model found i.e. ARIMA(2,1,3)
@@ -204,8 +226,18 @@ print(sqrt(mean(error_1^2, na.rm=TRUE)))
 print(sqrt(mean(error_2^2, na.rm=TRUE))) 
 ```
 
+### Prophet
 
-
+```{r, message = FALSE, warning = FALSE}
+time_index <- seq(from = as.POSIXct("2015-07-01"), to = as.POSIXct("2016-09-30"), by = "day")
+df<-cbind(as.data.frame(time_index),y=ASCII_ts['2015-07-01/2016-09-30'])
+colnames(df)<-c('ds','y')
+m <- prophet(df)
+future <- make_future_dataframe(m, periods = 92)
+forecast <- predict(m, future)
+plot(m, forecast)
+autoplot(ASCII_ts)
+```
 
 
 
