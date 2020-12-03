@@ -1,0 +1,165 @@
+---
+title: "Intervention_Analysis_2016_Rio_Olympics"
+author: "Prafulla Ranjan Dash"
+output: html_document
+---
+
+#### Here, we try and apply Intervention Analysis for the number of views time-series for the *2016_Summer_Olympics_en* webpage.
+
+```{r workdirimp, echo=TRUE, message=FALSE, warning=FALSE}
+# basic imports
+library("fpp", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
+library("ggplot2", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
+library("stats", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
+library("zoo", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
+library("TSA", lib.loc="C:/Users/HP/Anaconda3/envs/rstudio/lib/R/library")
+```
+
+#### Importing the data
+
+```{r dataimport, echo=TRUE, message=FALSE, warning=FALSE}
+setwd("D:/USMS/UChicago/STUDIES/Autumn 2020/MSCA 31006 1 Time Series Analysis and Forecasting/Final Project/Data")
+page_2016_Rio_Olympics_views <- data.matrix(read.csv("train_1.csv", header = TRUE, row.names = 1,sep = ",",nrows = 1,skip = 12186))
+```
+
+#### Preparing data to make it ready for time-series
+
+```{r dataprepare, echo=TRUE, message=FALSE, warning=FALSE}
+# removing column names
+dimnames(page_2016_Rio_Olympics_views) <- NULL
+
+# converting to array
+page_2016_Rio_Olympics_views <- array(page_2016_Rio_Olympics_views)
+
+# checking the values
+head(page_2016_Rio_Olympics_views)
+
+# no. of ovservations
+length(page_2016_Rio_Olympics_views)
+```
+
+Looking at the entire data - 
+
+```{r view, echo=TRUE, message=FALSE, warning=FALSE}
+plot(page_2016_Rio_Olympics_views,type = 'l')
+```
+
+Looking at this dataset, we can see there are few time periods where there seems to be a clear intervention at t=175. So, we will take a sub-section of this data for our analysis.
+
+```{r split, echo=TRUE, message=FALSE, warning=FALSE}
+page_2016_Rio_Olympics_views <- page_2016_Rio_Olympics_views[100:400]
+
+# converting data to ts
+page_2016_Rio_Olympics_views <- ts(page_2016_Rio_Olympics_views,frequency = 1)
+
+# plotting the time-series
+autoplot(page_2016_Rio_Olympics_views)
+```
+
+So, here we can clearly see some sort of **intervention** that took place at around the time-period of 75 days for this chunk of data (175 days overall). There is a clear **upward trend** after the time-period of 75 days. 
+
+Now, since the intervention is at time-period 75, we will divide our data into data-points prior to time-period 75 and post time-period 75. We will do this so that we can find the **underlying process** that is present in our observations, which are a **mix of the underlying process and the intervention**.
+
+Also, we will split our data to train and test so that we can see how our model performs on new data.
+
+```{r split2, echo=TRUE, message=FALSE, warning=FALSE}
+# train-test split
+#page_2016_FIFA_Club_World_Cup_views_train <- page_2016_FIFA_Club_World_Cup_views[1:340]
+#page_2016_FIFA_Club_World_Cup_views_test <- page_2016_FIFA_Club_World_Cup_views[341:350]
+
+# splitting to prior and post intervention
+page_2016_Rio_Olympics_views_prior <- page_2016_Rio_Olympics_views[1:75]
+page_2016_Rio_Olympics_views_post <- page_2016_Rio_Olympics_views[76:300]
+
+# converting to time-series
+page_2016_Rio_Olympics_views_prior <- ts(page_2016_Rio_Olympics_views_prior)
+page_2016_Rio_Olympics_views_post <- ts(page_2016_Rio_Olympics_views_post)
+```
+
+Now, let's see how our prior intervention data looks
+
+```{r prior, echo=TRUE, message=FALSE, warning=FALSE}
+autoplot(page_2016_Rio_Olympics_views_prior)
+```
+
+
+Looking at the data - 
+
+1. There is no visible non-seasonal trend.  
+2. There might be some seasonality where some patterns are repeating themselves.
+3. The variance seems unstable, might require some Box-Cox transformation.
+
+Applying Box-Cox - 
+
+```{r boxcox, echo=TRUE, message=FALSE, warning=FALSE}
+BoxCox.lambda(page_2016_Rio_Olympics_views_prior)
+
+page_2016_Rio_Olympics_views_prior_transformed <- BoxCox(page_2016_Rio_Olympics_views_prior,lambda = -0.6576963)
+
+autoplot(page_2016_Rio_Olympics_views_prior_transformed)
+```
+
+The variance now seems to have stabilized a bit. Now, let's look at the ACF and PACF for this signal.
+
+```{r acf, echo=TRUE, message=FALSE, warning=FALSE}
+tsdisplay(page_2016_Rio_Olympics_views_prior_transformed)
+```
+
+We can see from the ACF that our data is **not stationary** as there are significant spikes along with a sinusoidal component. Let's apply one order of non-seasonal differencing.
+
+```{r diff, echo=TRUE, message=FALSE, warning=FALSE}
+# differencing
+page_2016_Rio_Olympics_views_prior_transformed_diff <- diff(page_2016_Rio_Olympics_views_prior_transformed)
+
+# visulalizing
+tsdisplay(page_2016_Rio_Olympics_views_prior_transformed_diff)
+```
+
+one order of seasonal differencing
+
+
+```{r sdiff, echo=TRUE, message=FALSE, warning=FALSE}
+# differencing
+page_2016_Rio_Olympics_views_prior_transformed_diff2 <- diff(page_2016_Rio_Olympics_views_prior_transformed_diff,lag = 7)
+
+# visulalizing
+tsdisplay(page_2016_Rio_Olympics_views_prior_transformed_diff2)
+```
+
+
+We see that the data still does not appear stationary.
+
+Let's allow auto.arima to decide the best model for this data.
+
+```{r m_prior, echo=TRUE, message=FALSE, warning=FALSE}
+m_prior <- auto.arima(page_2016_Rio_Olympics_views_prior,lambda = 'auto')
+checkresiduals(m_prior)
+```
+
+```{r model, echo=TRUE, message=FALSE, warning=FALSE}
+m_prior_forecast <- forecast(m_prior,h = 225)
+plot(m_prior_forecast)
+```
+
+```{r model11, echo=TRUE, message=FALSE, warning=FALSE}
+#plot(stepfun(1,1:2))
+exp_intervention=1/dexp(1:226,rate = 0.04)
+plot(exp_intervention)
+m1 <- arimax(log(page_2016_Rio_Olympics_views),order = c(5,1,2),
+             xreg = data.frame(x=c(rep(0,75),exp_intervention)),method = 'ML')
+m1
+m2 <- arimax(log(page_2016_Rio_Olympics_views),order = c(5,1,2),
+              xtransf = data.frame(x=c(rep(0,75),exp_intervention)), method = 'ML')
+m3 <- arimax(page_2016_Rio_Olympics_views,order = c(5,1,2),
+             xreg = data.frame(x=c(rep(0,75),1:226)),method = 'ML')
+
+m4 <- arimax(page_2016_Rio_Olympics_views,order = c(5,1,2),
+             xreg = data.frame(x=c(rep(0,75),1:226)),method = 'ML')
+
+checkresiduals(m2)
+```
+
+```{r diag, echo=TRUE, message=FALSE, warning=FALSE}
+checkresiduals(m1)
+plot(1/dexp(1:226,rate = 0.03))
+```
