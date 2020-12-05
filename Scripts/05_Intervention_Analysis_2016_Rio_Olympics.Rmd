@@ -44,10 +44,9 @@ Looking at the entire data -
 plot(page_2016_Rio_Olympics_views,type = 'l')
 ```
 
-Looking at this dataset, we can see there are few time periods where there seems to be a clear intervention at t=175. So, we will take a sub-section of this data for our analysis.
+Looking at this dataset, we can see there seems to be a an intervention at t = 175. So, we will take a sub-section of this data for our analysis.
 
 ```{r split, echo=TRUE, message=FALSE, warning=FALSE}
-#page_2016_Rio_Olympics_views <- page_2016_Rio_Olympics_views[200:400]
 page_2016_Rio_Olympics_views <- page_2016_Rio_Olympics_views[100:400]
 
 # converting data to ts
@@ -62,8 +61,6 @@ So, here we can clearly see some sort of **intervention** that took place at aro
 Now, since the intervention is at time-period 75, we will divide our data into data-points prior to time-period 75 and post time-period 75. We will do this so that we can find the **underlying process** that is present in our observations, which are a **mix of the underlying process and the intervention**.
 
 Now, looking at the dates, this intervention took place on **23rd Dec 2015**. And there was an article which was published in the *The Guardian* newspaper on **8th Dec 2015** that there have been widespread human right violations in Rio de Janeiro because of the evictions taking place for creating the infrastructure needed for conducting the Olympics. So, we believe this report of **Human rights violation related to Summer Olympics 2016** could have generated the curiosity amongst the readers which resulted in the increase in the upward trend for the number of views for this Wikipedia page.
-
-Also, we will split our data to train and test so that we can see how our model performs on new data.
 
 ```{r split2, echo=TRUE, message=FALSE, warning=FALSE}
 # splitting to prior and post intervention
@@ -143,41 +140,131 @@ checkresiduals(m_prior)
 
 So, we see that the underlying process here is ARIMA(5,1,2). The residuals here seem to be white noise as there are no significant spikes for ACF of residuals. Looking at the residuals time-series, there is one outlier.
 
+Now, although this model is giving us white noise residuals, this model is quite **complex** because the order of the AR part is = 5, which is pretty high. 
+
+So, let us smooth our data by **downsampling** it, we will take weekly data instead of daily, by calulating the mean of the 7-day data
+
+```{r downsampling, echo=TRUE, message=FALSE, warning=FALSE}
+# reading data again
+setwd("D:/USMS/UChicago/STUDIES/Autumn 2020/MSCA 31006 1 Time Series Analysis and Forecasting/Final Project/Data")
+page_2016_Rio_Olympics_views <- data.matrix(read.csv("train_1.csv", header = TRUE, row.names = 1,sep = ",",nrows = 1,skip = 12186))
+
+# removing column names
+dimnames(page_2016_Rio_Olympics_views) <- NULL
+
+# converting to array
+page_2016_Rio_Olympics_views <- array(page_2016_Rio_Olympics_views)
+
+# downsampling
+page_2016_Rio_Olympics_views <- rollapply(page_2016_Rio_Olympics_views, 7, mean)
+
+# plotting
+plot(page_2016_Rio_Olympics_views,type = 'l')
+```
+
+This downsampled data looks much smoother.
+
+Now, taking a chunk of this data as previously - 
+
+```{r split3, echo=TRUE, message=FALSE, warning=FALSE}
+page_2016_Rio_Olympics_views <- page_2016_Rio_Olympics_views[100:400]
+
+# converting data to ts
+page_2016_Rio_Olympics_views <- ts(page_2016_Rio_Olympics_views,frequency = 1)
+
+# plotting the time-series
+autoplot(page_2016_Rio_Olympics_views)
+```
+
+Splitting to pre and post intervention
+
+```{r split4, echo=TRUE, message=FALSE, warning=FALSE}
+# splitting to prior and post intervention
+page_2016_Rio_Olympics_views_prior <- page_2016_Rio_Olympics_views[1:75]
+page_2016_Rio_Olympics_views_post <- page_2016_Rio_Olympics_views[76:300]
+
+# converting to time-series
+page_2016_Rio_Olympics_views_prior <- ts(page_2016_Rio_Olympics_views_prior)
+page_2016_Rio_Olympics_views_post <- ts(page_2016_Rio_Olympics_views_post)
+```
+
+Now, let's see how our prior intervention data looks
+
+```{r prior2, echo=TRUE, message=FALSE, warning=FALSE}
+autoplot(page_2016_Rio_Olympics_views_prior)
+```
+
+Looking at this data - 
+
+1. It definitely needs some Box Cox transformatio as the variance of the data is increasing with time.  
+2. There might be some seasonality.  
+3. There is no obvious trend.
+
+Let's allow auto.arima to decide the best model for this data.
+
+```{r m2_prior, echo=TRUE, message=FALSE, warning=FALSE}
+# applying auto.arima
+m2_prior <- auto.arima(page_2016_Rio_Olympics_views_prior,lambda = 'auto')
+
+# checking the model
+summary(m2_prior)
+
+# diagnozing model - residuals
+checkresiduals(m2_prior)
+```
+
+So, we see this time, our model for prior data is **much simpler**, its **ARIMA(1,1,1)** and looking at the residuals - 
+1. The time-series of residuals indicate the mean of the residuals is zero with one outlier  
+2. The ACF of residuals indicate that they are white noise
+
+This implies this model was able to capture the systematic patterns in our prior data and this is our **underlying process**.
+
+Now, let's see how the forecasts for this model looks.
+
 ```{r model, echo=TRUE, message=FALSE, warning=FALSE}
 # forecasting
-m_prior_forecast <- forecast(m_prior,h = 225)
+m2_prior_forecast <- forecast(m2_prior,h = 225)
 
 # plotting the forecasts
-plot(m_prior_forecast)
+plot(m2_prior_forecast)
 ```
 
 This is how the time-series would have looked if there was no intervention. Now, let's try and analyze what could be the transfer function that represents the intervention correctly.
 
-For this, we can just subtract the underlying process from the observations. That will give us the intervention. We suspect that the intervention can be described as AR(1) process.
+For this, we can just subtract the underlying process from the observations. That will give us the intervention. We tried some combinations for the intervention transfer function.
+
+We suspect that the intervention can be described as ARMA(2,2) process.
 
 ```{r model11, echo=TRUE, message=FALSE, warning=FALSE}
-# taking the point of intervention
+# storing the point of intervention
 IHRV <- 1*(seq(page_2016_Rio_Olympics_views)==75)
 
 # applying the model
-page_views_mPulse <- arimax(log(page_2016_Rio_Olympics_views), order = c(5,1,2),
-                     xtransf = data.frame(IHRV,IHRV),
-                     transfer = list(c(0,0),c(1,0)),
-                     xreg = data.frame(Dec96=1*(seq(page_2016_Rio_Olympics_views)==12),
-                                       Jan97=1*(seq(page_2016_Rio_Olympics_views)==13),
-                                       Dec02=1*(seq(page_2016_Rio_Olympics_views)==84)),
-                     method = 'ML'
-                     )
+page_views_mPulse <- arimax(log(page_2016_Rio_Olympics_views), order = c(1,1,1),
+                            xtransf = data.frame(IHRV),
+                            transfer = list(c(2,2)),
+                            xreg = 1*(seq(page_2016_Rio_Olympics_views)==175),
+                            method = 'ML'
+)
 # viewing the model
 page_views_mPulse
+
+# plotting the actual and the fitted values in log scale
+plot(log(page_2016_Rio_Olympics_views))
+points(fitted(page_views_mPulse),col = 'red')
+
+# plotting the actual and fitted in normal scale
+plot(page_2016_Rio_Olympics_views)
+points(exp(fitted(page_views_mPulse)),col = 'red')
 ```
 
-Here we applied the Regression with ARMA error for capturing the underlying process and the intervention. We assumed that the transfer function that can represent the intervention is an AR(1) function and we used the coefficients got from here to plot the intervention below.
+Here we applied the Regression with ARMA error for capturing the underlying process and the intervention. We assumed that the transfer function that can represent the intervention is an ARMA(2,2) function and we used the coefficients got from here to plot the intervention below.
 
 ```{r viewintervention, echo=TRUE, message=FALSE, warning=FALSE}
-plot(ts(IHRV*(0.0883)+filter(IHRV,filter = 1.0118, method = 'recursive', sides = 1)*(0.0883)),
+plot(ts(IHRV*(-0.0425)+filter(IHRV,filter = 1.0836, method = 'recursive', sides = 1)*(0.0256)),
      type = 'h',ylab = 'Pulse effects'
      )
+
 ```
 
 The above may be the intervention that took place.
@@ -188,4 +275,11 @@ Now, let's check the residuals of this model, how they performed.
 checkresiduals(page_views_mPulse)
 ```
 
-From the residuals ACF we can see that the residuals are not white noise and the model was not able to capture all the systematic patterns present in the data. We have to keep improving our model further.
+Looking at the residuals --
+
+1. From time-series we can see that the mean of the residuals are almost equal to zero, but there are few outliers.  
+2. From ACF we can see that the residuals are not white noise because there is a significant spike at lag 7.  
+3. The same outliers can also be seen in the histogram of residuals.
+
+So, We have to keep improving our model further and try applying other appropriate transfer functions that can represent the intervention that we have over here.
+
