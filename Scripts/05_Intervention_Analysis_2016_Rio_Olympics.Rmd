@@ -233,32 +233,36 @@ This is how the time-series would have looked if there was no intervention. Now,
 
 For this, we can just subtract the underlying process from the observations. That will give us the intervention. We tried some combinations for the intervention transfer function.
 
-We suspect that the intervention can be described as ARMA(2,2) process.
+We suspect that the intervention can be described as ARMA(2,2) process. For this, we kind of did trial and error for various processes like AR(1), AR(2), ARMA(1,1) etc. And we saw that the ARMA(2,2) process gave us a shape that was closer to the shape of our intervention.
 
 ```{r model11, echo=TRUE, message=FALSE, warning=FALSE}
 # storing the point of intervention
 IHRV <- 1*(seq(page_2016_Rio_Olympics_views)==75)
 
 # applying the model
-page_views_mPulse <- arimax(log(page_2016_Rio_Olympics_views), order = c(1,1,1),
+page_views_intervention_model <- arimax(log(page_2016_Rio_Olympics_views), order = c(1,1,1),
                             xtransf = data.frame(IHRV),
                             transfer = list(c(2,2)),
                             xreg = 1*(seq(page_2016_Rio_Olympics_views)==175),
                             method = 'ML'
 )
 # viewing the model
-page_views_mPulse
+page_views_intervention_model
 
 # plotting the actual and the fitted values in log scale
 plot(log(page_2016_Rio_Olympics_views))
-points(fitted(page_views_mPulse),col = 'red')
+points(fitted(page_views_intervention_model),col = 'red')
 
 # plotting the actual and fitted in normal scale
 plot(page_2016_Rio_Olympics_views)
-points(exp(fitted(page_views_mPulse)),col = 'red')
+points(exp(fitted(page_views_intervention_model)),col = 'red')
 ```
 
-Here we applied the Regression with ARMA error for capturing the underlying process and the intervention. We assumed that the transfer function that can represent the intervention is an ARMA(2,2) function and we used the coefficients got from here to plot the intervention below.
+Here we applied the **Regression with ARMA error** for capturing the underlying unperturbed process and the intervention. We also included one additive outlier at t = 175. Here additive outlier may be regarded as interventions of unknown nature that have a pulse response function.
+
+The black line denotes the actual observations and the red circles represent the fitted values from the model. We see that the model has performed pretty well here.
+
+We assumed that the transfer function that can represent the intervention is an ARMA(2,2) function and we used the coefficients got from here to plot the intervention below.
 
 ```{r viewintervention, echo=TRUE, message=FALSE, warning=FALSE}
 plot(ts(IHRV*(-0.0425)+filter(IHRV,filter = 1.0836, method = 'recursive', sides = 1)*(0.0256)),
@@ -272,14 +276,13 @@ The above may be the intervention that took place.
 Now, let's check the residuals of this model, how they performed.
 
 ```{r modeldiag, echo=TRUE, message=FALSE, warning=FALSE}
-checkresiduals(page_views_mPulse)
+checkresiduals(page_views_intervention_model)
 ```
 
 Looking at the residuals --
 
 1. From time-series we can see that the mean of the residuals are almost equal to zero, but there are few outliers.  
-2. From ACF we can see that the residuals are not white noise because there is a significant spike at lag 7.  
+2. From ACF we can see that the residuals are not white noise because there is a significant spike at lag 7, even though all other spikes are not significant.  
 3. The same outliers can also be seen in the histogram of residuals.
 
 So, We have to keep improving our model further and try applying other appropriate transfer functions that can represent the intervention that we have over here.
-
