@@ -1,0 +1,460 @@
+---
+title: "Web Traffic Time Series Forecasting -"
+author: "Surendiran Rangaraj"
+date: "11/7/2020"
+output:
+  html_document:
+    fig_height: 5
+    fig_width: 8
+    toc: yes
+    toc_depth: 1
+    toc_float:
+      collapsed: false
+    number_sections: false
+    theme: readable
+    highlight: tango
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries, include=FALSE}
+library(fpp2) # time series analysis
+library(tseries) # time series analysis
+library(ggplot2) # visualization
+library(forecast)  # time series analysis
+library(TSA)  # time series analysis
+library(dplyr) # data manipulation
+library(readxl) # data input
+library(xts) # time series analysis
+library(tibble) # data wrangling
+library(tidyr) # data wrangling
+library(prophet) # time series analysis
+library(zoo)
+library(TSstudio)
+library(lubridate)
+
+```
+
+
+```{r Read data}
+#Read the Input data as Dataframe
+webdata_path = 'C:/Users/rsure/Desktop/Uchicago/Time Series/Final Project/'
+#train_1_df = read.table(paste0(webdata_path,'train_1.csv'),sep=',',header = TRUE,skip =0,row.names = "Page")
+#train_2_df = read.table(paste0(webdata_path,'train_2.csv'),sep=',',header = TRUE,skip =0,row.names = "Page")
+olympics_web_df = read.table(paste0(webdata_path,'2016_Olympics_train1.csv'),sep=',',header = TRUE,skip =0)
+#
+c(ncol(olympics_web_df),nrow(olympics_web_df))
+```
+
+```{r data exploration}
+print(paste0("Number of Missing Values for 2016 Olympics:",(sum(is.na(olympics_web_df))/(ncol(olympics_web_df)*nrow(olympics_web_df)))))
+olympics_web_array=array(olympics_web_df[,'Visits'])
+length(olympics_web_array)
+head(olympics_web_array)
+
+#Plot
+
+plot_olympics <- data.frame(myts = olympics_web_array,
+                  Date = seq(as.Date("2015-07-01"), as.Date("2016-12-31") , by = 1))
+plot(olympics_web_array,type = 'l')
+plot(plot_olympics[c('Date','myts')][100:135,],type = 'l')
+
+
+
+# convert to time-series
+idx <- seq(as.Date("2015-07-01"), as.Date("2016-12-31"), by = "day")
+olympics_web_ts = ts(olympics_web_array, frequency = 7)
+olympics_wed_ts = ts(olympics_web_df[,c('Visits','Weekday','Period')], frequency = 7)
+head(olympics_web_ts)
+head(olympics_web_ts)
+tsdisplay(olympics_web_ts,main = 'Time Series Display of 2016 Olympics' )
+
+#Seasonal Decomposition
+#olympics_web_ts[,'Visits'] %>% mstl() %>% autoplot() 
+olympics_web_df[,'Visits'] %>% mstl() %>% autoplot() 
+olympics_wed_ts[,'Visits'] %>% mstl(s.window = "periodic",robust=TRUE) %>% autoplot() 
+
+plot(seasadj(mstl(olympics_wed_ts[,'Visits'],s.window = 7,robust=TRUE)))
+
+plot(decompose(olympics_wed_ts[,'Visits'],type = 'additive'))
+plot(decompose(olympics_wed_ts[,'Visits'],type = 'multiplicative'))
+
+ggseasonplot(olympics_wed_ts[,'Visits'], year.labels=TRUE, year.labels.left=TRUE) +
+  ylab("Visits") +
+  ggtitle("Seasonal plot: Olympics visits")
+
+```
+No Missing values found of the 550 Observations . 
+
+### 2016 Summer Olympics Time series modeling 
+
+There is block intervention in our data. We will look at the time series data for 2016 Summer Olympics and perform basic modeling
+
+### Convert to Time Series
+First Let's convert it to time-series and then split it to train and test - we will train our models for the period 1st July 2015 till 30th Nov 2016 and we will forecast for 1st Dec 2016 to 31st Dec 2016
+
+
+```{r split}
+
+split_ts <- ts_split(ts.obj = olympics_web_ts, sample.out = 31)
+
+olympics_web_ts_train <- split_ts$train
+olympics_web_ts_test <- split_ts$test
+
+# viewing the train and test
+tail(olympics_web_ts_train) 
+head(olympics_web_ts_test)
+
+print(paste0("Total Observations in Training dataset : ", length(olympics_web_ts_train), " Total Observations in Test dataset : ", length(olympics_web_ts_test)))
+
+autoplot(olympics_web_ts_train,xlab = "Time",ylab = "No of Visits", main = "Time Series plot of 2016 Olympics English Web page Visits")
+autoplot(olympics_web_ts_test,xlab = "Time",ylab = "No of Visits", main = "Time Series plot of 2016 Olympics English Web page Visits")
+
+#time series display
+tsdisplay(olympics_web_ts_train,ylab="2016 Rio Summer Olympics Web page Visits-Train",xlab="Time")
+tsdisplay(olympics_web_ts_test,ylab="2016 Rio Summer Olympics Web page Visits-Test",xlab="Time")
+
+```
+
+```{r test}
+kpss.test(olympics_web_ts_train,null = 'Trend') # p-value = 0.01261  < 0.05 # Reject Null Hypothesis => The process is not stationary 
+adf.test(olympics_web_ts_train) # p-value = 0.07705 > 0.05  # Reject Null Hypothesis => The process is not stationary 
+
+print(paste0("Boxcox lambda value for the entire dataset  is :" ,BoxCox.lambda(olympics_web_ts_train)))
+print(paste0("Boxcox lambda value for the train dataset  is :" ,BoxCox.lambda(olympics_web_ts_train)))
+
+```
+
+<div class="alert alert-info">
+ 
+ 
+</div>
+
+
+**Kwiatkowski Phillips Schmidt Shin (KPSS) tests**
+
+Null hypothesis: The process is stationary => Large p value
+
+Alternative hypothesis: The process is nonstationary =>  Small p value
+
+**Augmented Dickey Fuller test**
+
+Null hypothesis: The process is nonstationary => Large p value
+
+Alternative hypothesis: The process is stationary => Small p value
+
+### Remove Outliers
+
+```{r outlier, include= FALSE}
+```
+
+### Box-Cox Transformation
+
+```{r box-cox}
+
+lambda = BoxCox.lambda(olympics_web_ts_train)
+olympics_web_ts_Boxcox = BoxCox(olympics_web_ts_train,lambda)
+
+tsdisplay(olympics_web_ts_Boxcox)
+plot(olympics_web_ts_Boxcox[1:30],type="l")
+
+kpss.test(olympics_web_ts_Boxcox) # p-value = 0.01  < 0.05 # Reject Null Hypothesis => The process is not stationary 
+adf.test(olympics_web_ts_Boxcox) # p-value = 0.88  > 0.05 # Accept Null Hypothesis => The process is not stationary 
+
+```
+###  Differencing
+
+```{r nsdiff,include = TRUE}
+
+# Apply seasonal differencing
+olympics_web_ts_Boxcox_sdiff <- diff(olympics_web_ts_Boxcox,7)
+kpss.test(olympics_web_ts_Boxcox_sdiff)
+tsdisplay(olympics_web_ts_Boxcox_sdiff,main = 'Time Series Display of Olympics Data- BoxCox Seasonal Differencing')
+
+# Apply non-seasonal differencing
+olympics_web_ts_Boxcox_diff <- diff(olympics_web_ts_Boxcox_sdiff)
+tsdisplay(olympics_web_ts_Boxcox_diff,main = 'Time Series Display of Olympics Differenced Data')
+kpss.test(olympics_web_ts_Boxcox_diff) # Null hypothesis: The process is stationary => Large p value of 0.1
+
+# No seasonal - only non-seasonal differencing
+olympics_web_ts_Boxcox_nsdiff <- diff(olympics_web_ts_Boxcox)
+kpss.test(olympics_web_ts_Boxcox_nsdiff)
+tsdisplay(olympics_web_ts_Boxcox_sdiff,main = 'Time Series Display of Olympics Data- Differencing')
+
+# No seasonal - only non-seasonal differencing
+olympics_web_ts_nsdiff <- diff(olympics_web_ts)
+kpss.test(olympics_web_ts_Boxcox_nsdiff)
+tsdisplay(olympics_web_ts_Boxcox_sdiff,main = 'Time Series Display NSeasonal Differencing-No Boxcox')
+
+plot_olympics <- data.frame(myts = olympics_web_array,
+                  Date = seq(as.Date("2015-07-01"), as.Date("2016-12-31") , by = 1))
+plot(olympics_web_ts_Boxcox_nsdiff[1:35],type = 'l')
+
+```
+
+### ARFIMA 
+
+```{r arfima}
+
+acf(olympics_web_ts_Boxcox,lag.max = 150)
+olympics_web_arfima = arfima(olympics_web_ts_Boxcox)
+summary(olympics_web_arfima)
+
+```
+
+
+### ETS model
+
+ ETS model and see how it turns out.
+
+```{r ets}
+olympics_web_ets_fit <- ets(olympics_web_ts_train,lambda = "auto")
+olympics_web_ets_fit 
+
+plot(forecast(olympics_web_ets_fit,h=10))
+checkresiduals(olympics_web_ets_fit)
+
+ olympics_web_ets_fc= forecast(olympics_web_ets_fit,h=31)
+
+ olympics_web_ets_fc %>% autoplot(xlab = 'Time',ylab='Visits',main = '2016 Olympics Visits - ETS')
+##
+accuracy(olympics_web_ets_fc,olympics_web_ts_test)
+
+```
+
+
+### Naive method
+
+```{r naive}
+
+checkresiduals(naive(olympics_web_ts))
+mean(naive(olympics_web_ts)$residuals,na.rm = TRUE)
+
+```
+
+### Spectral Analysis
+
+
+```{r periodogram}
+spectrum(olympics_web_df[,'Visits'])
+olymp_pgrm = periodogram(olympics_web_df[,'Visits'],log="yes") # spike in low frequency means it is dictated by trend and no other frequency
+round(olymp_pgrm$spec,2)
+```
+
+### Applying auto.arima
+#### auto arima with no seasonal differencing 
+
+```{r autoarima1}
+
+olympics_web_arima_fit_ns <- auto.arima(olympics_web_ts_train,lambda = "auto",seasonal = FALSE)
+olympics_web_arima_fit_ns
+checkresiduals(olympics_web_arima_fit_ns)
+```
+
+
+### ARIMA with Seasonalality
+
+```{r wd autoarima1}
+
+olympics_web_arima_fit_d1 <- auto.arima(olympics_web_ts_train,lambda = "auto",seasonal = TRUE,d=1)
+olympics_web_arima_fit_d1
+
+plot(olympics_web_arima_fit_d1$x, col="red", type="l")
+lines(fitted(olympics_web_arima_fit_d1), type="l",col="blue")
+checkresiduals(olympics_web_arima_fit_d1)# p-value = 0.0191 < 0.05 ==> Reject Null hypothesis ==>  The TS is not independently distributed
+Box.test(olympics_web_arima_fit_d1$residuals,type = c("Ljung-Box"),lag=20)
+Acf(olympics_web_arima_fit_d1$residuals,lag.max = 60)
+
+#forecast
+olympics_df_arima_forecast_d1 = forecast(olympics_web_arima_fit_d1,h=31)
+autoplot(olympics_df_arima_forecast_d1,main='Forecast with Seasonal Differencing')
+accuracy(olympics_df_arima_forecast_d1,olympics_web_ts_test)
+
+
+```
+
+```{r wd  fitted1}
+
+olympics_web_arima_fit_sd <- auto.arima(olympics_web_ts_train,lambda = "auto",seasonal = TRUE,d=1,D=1)
+olympics_web_arima_fit_sd
+
+plot(olympics_web_arima_fit_sd$x, col="red", type="l")
+lines(fitted(olympics_web_arima_fit_sd), type="l",col="blue")
+checkresiduals(olympics_web_arima_fit_sd)# p-value = 0.0191 < 0.05 ==> Reject Null hypothesis ==>  The TS is not independently distributed
+Box.test(olympics_web_arima_fit_sd$residuals,type = c("Ljung-Box"),lag=20)
+Acf(olympics_web_arima_fit_sd$residuals,lag.max = 60)
+
+#forecast
+olympics_df_arima_forecast_sd = forecast(olympics_web_arima_fit_sd,h=31)
+autoplot(olympics_df_arima_forecast_sd,main='Forecast with Seasonal Differencing')
+accuracy(olympics_df_arima_forecast_sd,olympics_web_ts_test)
+
+```
+
+
+
+```{r fourier ns non wd}
+
+fr = fourier(olympics_web_ts_train,K = 3)
+bestfit = list(aicc=Inf)
+
+for (i in 1:3)
+{
+  olympics_df_arima_fit_frns <- auto.arima(olympics_web_ts_train,xreg=fourier(olympics_web_ts_train, K=i),lambda = "auto",seasonal = FALSE)
+  if (olympics_df_arima_fit_frns$aicc < bestfit$aicc)
+    bestfit = olympics_df_arima_fit_frns
+  else break;
+}
+
+bestfit
+#check residuals
+checkresiduals(bestfit)
+Box.test(bestfit$residuals,type = c("Ljung-Box"),lag=20)
+Acf(bestfit$residuals,lag.max = 60)
+summary(bestfit)
+
+fc_fr = fourier(olympics_web_ts_train, K=3,h=31)
+olympics_df_arima_forecast_frns = forecast(bestfit,xreg=fc_fr)
+autoplot(olympics_df_arima_forecast_frns)
+accuracy(olympics_df_arima_forecast_frns,olympics_web_ts_test)
+#Forecast Plot
+plot(olympics_web_arima_fit_sd$x, col="red", type="l")
+lines(fitted(bestfit), type="l",col="blue")
+```
+
+rule-of-thumb could be modified a little as follows:
+
+For non-seasonal time series, use  h = min (10,T/5).
+For seasonal time series, use h=min(2m,T/5).
+
+
+``` {r tbats fourier}
+
+#olympics_tbats_fit = tbats(olympics_web_df[,'Visits'])
+
+olympics_tbats_fit = tbats(olympics_web_ts_train)
+olympics_tbats_fit
+
+checkresiduals(olympics_tbats_fit)
+
+olympics_tbats_fc = forecast(olympics_tbats_fit,h=31) 
+accuracy(olympics_tbats_fc,olympics_web_ts_test)
+
+
+#no short term ARMA model needed here
+
+
+```
+
+```{r cbind fc}
+
+model_values = cbind(train_fitted=fitted(olympics_df_arima_forecast_frns),Dec2016_forecast = olympics_df_arima_forecast_frns$mean)
+write.csv(model_values,'ARIMA_with_Errors_fitted_forecasted_values.csv')
+```
+
+###CV - Expanding and Sliding Window
+
+#### Set/Initialize Parameters for the model
+```{r set values}
+#Set the CV parameters
+
+k <- 160 # minimum data length for fitting a model
+n <- length(olympics_web_ts) # Number of data points
+p <- 7 ## Period
+H <- 31 # Forecast Horizon
+
+```
+#### ARIMA and ETS Models
+
+```{r CV arima,include=FALSE,eval=FALSE}
+defaultW <- getOption("warn") 
+options(warn = -1)
+
+st <- tsp(olympics_web_ts_train)[1]+(k-2)/p #  gives the start time in time units, #1998.5
+
+arima_mae_1 <- matrix(NA,n-k,H)
+arima_mae_2 <- matrix(NA,n-k,H)
+ets_mae_1 <- matrix(NA,n-k,H)
+ets_mae_2 <- matrix(NA,n-k,H)
+
+arima_rmse_1 <- matrix(NA,n-k,H)
+arima_rmse_2 <- matrix(NA,n-k,H)
+ets_rmse_1 <- matrix(NA,n-k,H)
+ets_rmse_2 <- matrix(NA,n-k,H)
+
+arima_aicc_1 <- matrix(NA,n-k)
+arima_aicc_2 <- matrix(NA,n-k)
+ets_aicc_1 <- matrix(NA,n-k)
+ets_aicc_2 <- matrix(NA,n-k)
+
+
+for(i in 1:(n-k))
+#for(i in 1:25)
+{
+### One Month rolling forecasting
+# Expanding Window 
+expand_train1 <- window(olympics_web_ts, end=st + i/p)  ## Window Length: k+i
+  
+  # Sliding Window - keep the training window of fixed length. 
+  # The training set always consists of k observations.
+slide_train2 <- window(olympics_web_ts, start=st+(i-k+1)/p, end=st+i/p) ## Window Length: k
+  
+test <- window(olympics_web_ts, start=st + (i+1)/p, end=st + (i+H)/p) ## Window Length: H
+
+ if (i==1 || i==80) {
+  cat(c("*** CV", i,":","len(Expanding Window):",length(expand_train1), "len(Sliding Window):",length(slide_train2), "len(Test):",length(test),'\n'  ))
+  cat(c("*** TRAIN -  Expanding WIndow:",tsp(expand_train1)[1],'-',tsp(expand_train1)[2],'\n'))
+  cat(c("*** TRAIN - Sliding WIndow:",tsp(slide_train2)[1],'-',tsp(slide_train2)[2],'\n'))
+  cat(c("*** TEST:",tsp(test)[1],'-',tsp(test)[2],'\n'))
+  cat("*************************** \n \n")
+}
+  
+  ##Seasonal ARIMA model - sARIMA([2,1,2][2,1,0]7 with Expanding Window
+  arima_fit_1 <- Arima(expand_train1, order=c(1,1,4), xreg=fourier(expand_train1, K=3), lambda="auto", method="ML")
+  fc_frex = fourier(expand_train1, K=3,h=H)
+  arima_fcast_1 <- forecast(arima_fit_1, xreg=fc_frex)
+  
+  
+  
+  ##Seasonal ARIMA model - sARIMA([1,0,1][0,1,2]12 with Sliding Window
+  arima_fit_2 <- Arima(slide_train2, order=c(1,1,4), xreg=fourier(slide_train2, K=3), lambda="auto", method="ML")
+  fc_frsl = fourier(slide_train2, K=3,h=H)
+  arima_fcast_2 <- forecast(arima_fit_2, xreg=fc_frsl)
+  
+
+# Calculate Forcast MAE
+  arima_mae_1[i,1:length(test)] <- abs(arima_fcast_1[['mean']]-test)
+  arima_mae_2[i,1:length(test)] <- abs(arima_fcast_2[['mean']]-test)
+
+  
+# RMSE sqrt(sum((arima_fcast_2[['mean']]-test)^2)/length(test))
+
+#AICC
+  arima_aicc_1[i] <-  arima_fit_1$aicc
+  arima_aicc_2[i] <-  arima_fit_2$aicc
+
+}
+
+```
+
+#### Mean RMSE value
+
+```{r mean rmse,include=FALSE,eval=FALSE }
+#RMSE Mean value of different models
+# arima expanding 
+mean(sqrt(colMeans(arima_mae_1^2,na.rm=TRUE))) 
+# arima sliding 
+mean(sqrt(colMeans(arima_mae_2^2,na.rm=TRUE)))
+# ETS expanding 
+
+
+#Calculate RMSE and plot per horizon
+plot(1:31, sqrt(colMeans(arima_mae_1^2,na.rm=TRUE)), type="l",col="red",xlab="Horizon(Days)", ylab="RMSE",lty = 1,lwd = 3,main = "Root-square Forecast Error (RMSE) vs forecast horizon",ylim=c(10000,75000),cex.axis = 1.5,cex.lab = 1.5)
+lines(1:31, sqrt(colMeans(arima_mae_2^2,na.rm=TRUE)), type="l",col="green",lty = 1,lwd = 3)
+legend("topleft",legend=c("sARIMA - Expanding Window","sARIMA - Sliding Window" ),col=c("orange","blue"),lty=1,box.lty=0)
+
+
+```
