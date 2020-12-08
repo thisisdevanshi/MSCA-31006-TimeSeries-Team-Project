@@ -49,6 +49,9 @@ dimnames(page_Legalhigh_views) <- NULL
 # converting to array
 page_Legalhigh_views <- array(page_Legalhigh_views)
 
+# downsampling
+page_Legalhigh_views <- rollapply(page_Legalhigh_views, 7, mean)
+
 # checking the values
 head(page_Legalhigh_views)
 
@@ -186,8 +189,8 @@ time_periods
 
 So, few things to notice here --
 
-1. The frequency that is **contributing the most** to this signal is **0.3925926**
-2. If we look at the corresponding time-periods to the high contributing frequencies, then we can see that they are time-periods of **2 days and 3 days**. This means, that this signal has a dynamic pattern that is repeating itself every 2 days and 3 days.
+1. The frequency that is **contributing the most** to this signal is **0.1981481**
+2. If we look at the corresponding time-periods to the high contributing frequencies, then we can see that they are time-periods of **5, 4 and 3 days**. This means, that this signal has a dynamic pattern that is repeating itself every 2 days and 3 days.
 
 This is also in accordance with **Nyquist** frequency. Since our sampling frequency is **1 day**, we can detect a cycle that is **atleast 2 days** in length. We **cannot detect** a cycle that is **less** than 2 days.
 
@@ -199,7 +202,7 @@ m1 <- auto.arima(page_Legalhigh_views_train, xreg = fourier(page_Legalhigh_views
 summary(m1)
 ```
 
-Here, we see auto.arima has chosen the model **Regression with ARIMA(2,1,3) errors**. This model has **train RMSE of 6.774151**
+Here, we see auto.arima has chosen the model **Regression with ARIMA(2,1,1) errors**. This model has **train RMSE of 1.34272**
 
 Let's forecast for 10 days using this.
 
@@ -214,29 +217,29 @@ accuracy(forecast_m1$mean[1:10],page_Legalhigh_views_test)
 autoplot(forecast_m1)
 ```
 
-Test RMSE = 6.789675, which is pretty good and close to train RMSE  
+Test RMSE = 2.385104, which is pretty good and close to train RMSE  
 => model is fitting well, its not overfitting on underfitting.
 
 Now, let's checkout the residuals for this model
 
 ```{r m1residuals, echo=TRUE, message=FALSE, warning=FALSE}
-checkresiduals(m1)
+checkresiduals(m1,lag = 25)
 
 #checking mean of the residuals
 mean(m1$residuals)
 ```
 
-1. From the ACF, we can see that the ACF almost resembles white noise because most of the spikes are NOT significant. This indicates that our model was able to capture the systematic patterns that we had in our data.
+1. From the ACF, we can see that the ACF does not exactly resemble white noise because some of the spikes are significant. This indicates that our model was not able to capture the systematic patterns that we had in our data.
 
-2. Looking at the time-series of the residuals, the mean is almost = 0, but it can be more closer to zero.
+2. Looking at the time-series of the residuals, the mean is almost = 0.
 
 3. Looking at the histogram of the residuals, we see its fairly mormally distributed with few outliers.
 
-4. The p-value obtained from Ljung-Box test for the residuals also confirms that the the residuals are indeed independently distributed.
+4. The p-value obtained from Ljung-Box test for the residuals also confirms that the the residuals are not independently distributed.
 
 ## TBATS model
 
-Now, we have seen that how the Regression (Fourier transform) with ARIMA errors has performed. We have also seen that our signal does have multiple seasonal components of 2 days and 3 days. So, in order to better capture these patterns, let's go with something called TBATS model which stands for - 
+Now, we have seen that how the Regression (Fourier transform) with ARIMA errors has performed. We have also seen that our signal does have multiple seasonal components of 5 days , 4 days and 3 days. So, in order to better capture these patterns, let's go with something called TBATS model which stands for - 
 
 **T**rigonometric terms for seasonality  
 **B**ox Cox transformations for heterogeneity  
@@ -251,9 +254,9 @@ m2
 
 Just dissecting this model that was chosen - 
 
-1. The model has applied Box-Cox transformation of lambda = 0.01 which is very close to log transformation  
+1. The model has applied Box-Cox transformation of lambda = 0.285  
 2. The ARMA error is {0,0}  
-3. A damping parametr of 0.878 has been applied
+3. A damping parametr of 0.854 has been applied
 
 Forecasting for 10 days with this model -
 
@@ -270,12 +273,14 @@ checkresiduals(m2)
 mean(m2$errors)
 ```
 
-1. From the ACF, we can see that the ACF almost resembles white noise because most of the spikes are NOT significant. This indicates that our model was able to capture the systematic patterns that we had in our data.
+1. From the ACF, we can see that the ACF does not exactly resemble white noise because some of the spikes are significant. This indicates that our model was not able to capture the systematic patterns that we had in our data.
 
-2. Looking at the time-series of the residuals, the mean is almost =  0, this means our model is not biased.
+2. Looking at the time-series of the residuals, the mean is almost = 0.
 
-3. Looking at the histogram of the residuals, we see its fairly mormally distributed with one or two outliers.
+3. Looking at the histogram of the residuals, we see its fairly mormally distributed with few outliers.
 
-4. The p-value obtained from Ljung-Box test for the residuals also confirms that the the residuals are indeed independently distributed.
+4. The p-value obtained from Ljung-Box test for the residuals also confirms that the the residuals are not independently distributed.
 
-We also see that the mean of the residuals is closer to zero for TBATS model than for Regression with ARIMA errors.
+We also see that the mean of the residuals is closer to zero for Regression with ARIMA errors than for TBATS model.
+
+But, both the models need some improvement as indicated by the analysis of the residuals.
