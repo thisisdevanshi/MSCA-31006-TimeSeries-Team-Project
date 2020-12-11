@@ -1,0 +1,233 @@
+---
+title: "Web Traffic Time Series Forecasting "
+author: "Aakash Pahuja"
+date: "27th Nov 2020"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 5
+---
+
+### Overview
+
+#### Description
+
+We decided to work on one of the most burning time series problem of today's day and era, "predicting web traffic". We believe that this forecasting can help website servers a great deal in effectively handling outages. The technique we implemented can be extended to diverse applications in financial markets, weather forecasts, audio and video processing. Not just that, understanding your website's traffic trajectory can open up business opportunities too.
+
+#### Dataset
+The dataset consists of 145k time series representing the number of daily page views of different Wikipedia articles, starting from July 1st, 2015 up until September 10th, 2017 (804 data points).
+
+#### For these models, I have focused on the **3C_zh** wikipedia page
+
+```{r workdirimp, echo=TRUE, message=FALSE, warning=FALSE}
+# basic imports
+library("fpp")
+library("ggplot2")
+library("xts")
+```
+
+#### Importing the data
+
+```{r dataimport, echo=TRUE, message=FALSE, warning=FALSE}
+train_1 <- read.csv("train_1.csv", header = TRUE, row.names = 1,sep = ",",skip =0)
+website <- data.matrix(train_1[c("3C_zh.wikipedia.org_all-access_spider"),])
+```
+
+### ARIMA model
+
+#### Preparing data to make it ready for time-series
+
+```{r tsready, echo=TRUE, message=FALSE, warning=FALSE}
+# removing column names
+dimnames(website) <- NULL
+# converting to array
+website <- array(website)
+# checking the values
+head(website)
+# no. of ovservations
+length(website)
+```
+
+So, we see that there are 550 observations, i.e. number of views for the wikipedia page for 550 days from 1st July 2015 till 31st Dec 2016
+
+Let's convert it to time-series and then split it to train and test - we will train our models for the period 1st July 2015 till 20th Dec 2016 and we will forecast for 21st Dec 2016 to 31st Dec 2016
+
+```{r ts, echo=TRUE, message=FALSE, warning=FALSE}
+# converting to time-series
+time_index <- seq(from = as.POSIXct("2015-07-01"),to = as.POSIXct("2016-12-31"), by = "day")
+website_ts <- xts(website, order.by =time_index ,frequency = 365.25)
+# checking first few values
+head(website_ts)
+# splitting to train and test
+website_ts_train <- website_ts['2015-07-01/2016-12-20']
+website_ts_test <- website_ts['2016-12-21/2016-12-31']
+```
+
+Now, let's look at our train data.
+
+```{r trainlook, echo=TRUE, message=FALSE, warning=FALSE}
+autoplot(website_ts_train,xlab = "Time") 
+```
+
+From the first look of the time-series, we see that there are few outliers around the Index 2016-03 and 2016-12,. We see that after the occurence of this outlier, the level of the time-series did not change, hence this outlier **is not an intervention**. So, we can replace this value with the mean of all observations to maintain sanity.
+
+We see, it is a bit better now, but few more outliers still left, let's treat them similarly as they do not cause any change in the level of the data.
+
+```{r outlier2, echo=TRUE, message=FALSE, warning=FALSE}
+# replacing the outlier with mean
+website_ts_train[website_ts_train>100]
+website_ts_train[website_ts_train>100] <- mean(website_ts_train[!website_ts_train>=100])
+# plotting
+autoplot(website_ts_train)
+```
+
+We can still see an outlier around 2016-04, lets remove that too
+
+```{r}
+website_ts_train[website_ts_train>20]
+website_ts_train[website_ts_train>20] <- mean(website_ts_train[!website_ts_train>20])
+# plotting
+autoplot(website_ts_train)
+```
+
+```{r}
+tsdisplay(website_ts_train)
+```
+
+
+Looks much better now. But we may notice that the variance is increasing over time, so transformation of data might be needed to de-couple variance from the mean, but lets confirm that with the BoxCox function
+
+Transforming the data -->
+
+```{r transform, echo=TRUE, message=FALSE, warning=FALSE}
+# finding ideal lambda
+BoxCox.lambda(website_ts_train)
+# transforming the data
+website_ts_train_transformed <- BoxCox(website_ts_train,lambda = 0.357943)
+# visualizing again
+autoplot(website_ts_train_transformed)
+```
+
+Few things we can notice about the time-series ->
+
+1. It has a slight non-seasonal and long-term trend
+2. Might be a hint of cyclical component
+4. The level does not seem constant over time
+
+
+Now, let's look at the ACF and PACF for this time-series
+
+```{r ACF, echo=TRUE, message=FALSE, warning=FALSE}
+tsdisplay(website_ts_train_transformed)
+```
+
+From the ACF/PACF we can see -->
+
+1. Most of the lines in the ACF are within the boundary, which shows that our data is white noise, hence this indicates that the data is **stationary**.
+2. Drop in PACF after lag 1, this might be an indication that we can apply AR model with order = 1
+
+Applying KPSS test to check stationarity -->
+
+```{r kpss, echo=TRUE, message=FALSE, warning=FALSE}
+kpss.test(website_ts_train_transformed)
+```
+
+The p-value = 0.01  
+=> We reject the NULL hypothesis  
+=> The data is **NOT stationary**
+
+So, to handle the non-seasonal non-stationarity, let's apply 1 order of non-seasonal differencing.
+
+```{r nsdiff, echo=TRUE, message=FALSE, warning=FALSE}
+# applying 1st order differencing
+website_ts_train_transformed_diff <- diff(website_ts_train_transformed)
+# visualizing data
+tsdisplay(website_ts_train_transformed_diff)
+```
+
+Now, we can see from time-series plot the data appears stationary. From the ACF, we can see that there is no more slow decay, which indicates it **is stationary**.
+
+Let's confirm this with KPSS test
+
+```{r kpss2, echo=TRUE, message=FALSE, warning=FALSE}
+kpss.test(website_ts_train_transformed_diff)
+```
+
+Here, p-value = 0.1  
+=> The data **is stationary**
+
+Applying auto.arima
+
+```{r autoarima, echo=TRUE, message=FALSE, warning=FALSE}
+auto.arima(website_ts_train,seasonal = TRUE,lambda = 0.357943)
+```
+
+The auto.arima also chooses the value for d as 1, so lets go ahead and create the ARIMA model.
+
+Applying the model suggested by auto.arima
+
+```{r arima, echo=TRUE, message=FALSE, warning=FALSE}
+m1 <-Arima(website_ts_train,order=c(0,1,2),include.drift = TRUE, lambda = 0.357943)
+m1
+```
+
+Forecasting
+
+```{r forecast, echo=TRUE, message=FALSE, warning=FALSE}
+forecast(m1,h=10)
+```
+
+Visualizing the forecast
+
+```{r forecastv, echo=TRUE, message=FALSE, warning=FALSE}
+plot(forecast(m1,h=10))
+```
+
+Checking model performance
+
+```{r performance, echo=TRUE, message=FALSE, warning=FALSE}
+accuracy(forecast(m1,h=10),website_ts_test)
+```
+
+There is someoverfitting, but otherwise the ARIMA model does pretty good. Now let look at the naive models
+
+### Naive Models
+
+```{r others, echo=TRUE, message=FALSE, warning=FALSE}
+Model_Mean <- meanf(website_ts_train, h=10) 
+Model_Naive <- naive(website_ts_train, h=10) 
+Model_Drift <- rwf(website_ts_train, h=10, drift=TRUE)
+accuracy(Model_Mean,website_ts_test)
+accuracy(Model_Naive,website_ts_test)
+accuracy(Model_Drift,website_ts_test)
+```
+
+So, we see that our model test RMSE is better than that of all naive models.
+
+Let's see how the residuals are.
+
+```{r residuals, echo=TRUE, message=FALSE, warning=FALSE}
+checkresiduals(m1)
+```
+
+From the time-series of the residuals, we see that its mean = 0 => our model is not biased.
+
+From ACF plot, we see that the ACF of the residuals are almost white noise. There is no significant correlations between the residuals. This implies that our model performed well.There is one significant spike at lag 22.  
+From the histogram, we can see that the residuals are fairly normally distributed.
+
+### ETS model
+
+Now, let's try forecasting with ETS model and see how it turns out.
+
+```{r ets, echo=TRUE, message=FALSE, warning=FALSE}
+m2 <- ets(website_ts_train,lambda = "auto")
+m2
+accuracy(forecast(m2,h=10),website_ts_test)
+```
+
+We see that the test RMSE is kind of between that of ARIMA model and the naive models.
+
+The ets function is a function from the R Forecast package which is used to automatically select which one of the possible exponential smoothing models best fits the data. It uses the state space representation to do so, hence we dont need to use **Holt** or **Holt-Winters**, which are both exponential smoothing functions with a trend component.
+
+ets() seems about as good as is possible without using a much slower optimization routine. Where there is a difference between ets() and HoltWinters(), the results from ets() are usually more reliable, as we can see.

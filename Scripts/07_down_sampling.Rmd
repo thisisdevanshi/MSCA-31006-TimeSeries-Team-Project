@@ -1,0 +1,260 @@
+---
+title: "Down Sampling the Olympics Data"
+author: "Aakash Pahuja"
+output: html_document
+---
+
+```{r}
+# basic imports
+library("fpp")
+library("ggplot2")
+library("stats")
+library("zoo")
+library("TSA")
+library("xts")
+```
+
+#### Importing the data
+
+```{r}
+rio <- data.matrix(read.csv("train_1.csv", header = TRUE, row.names = 1,sep = ",",nrows = 1,skip = 12186))
+```
+
+#### Preparing data to make it ready for time-series
+
+```{r}
+# removing column names
+dimnames(rio) <- NULL
+# converting to array
+rio <- array(rio)
+# checking the values
+head(rio)
+# no. of ovservations
+length(rio)
+```
+
+#### Looking at the entire data - 
+
+```{r}
+plot(rio,type = 'l')
+```
+
+```{r}
+# converting to time-series
+time_index <- seq(from = as.POSIXct("2015-07-01"),to = as.POSIXct("2016-12-31"), by = "day")
+rio_ts <- xts(rio, order.by =time_index ,frequency = 365.25)
+# checking first few values
+head(rio_ts)
+```
+
+#### Lets convert our data from daily to weekly using rollapply by taking the mean of the last 7 values
+
+```{r}
+rio_week = rollapply(rio_ts[,1], 7, mean, by=7)
+```
+
+```{r}
+head(rio_week, 14)
+```
+
+#### Removing the NA values in our weekly dataset
+
+```{r}
+rio_week = na.remove(rio_week[,1])
+```
+
+```{r}
+class(rio_week)
+```
+
+#### Checking for the length of the data
+
+```{r}
+length(rio_week)
+```
+
+#### Lets plot it
+
+```{r}
+plot(rio_week,type = 'l')
+```
+
+#### Lets convert the weekly data into time series
+
+```{r}
+rio_week_ts <- ts(rio_week,frequency = 1)
+```
+
+#### Lets check the last 10 values of the data
+
+```{r}
+rio1 <- rio_week[68:78]
+# converting data to ts
+rio_ts <- ts(rio1,frequency = 1)
+# plotting the time-series
+autoplot(rio_ts)
+```
+
+#### Train Test Split, we wil take the last month which is the month of December 2016 as our test
+
+```{r}
+rio_week_train <- rio_week_ts[1:74]
+rio_week_test <- rio_week_ts[75:78]
+# converting to time-series
+rio_week_train <- ts(rio_week_train)
+rio_week_test <- ts(rio_week_test)
+```
+
+```{r}
+tsdisplay(rio_week_train)
+```
+
+#### We will apply the Box Cox transformation just to transform the non-normal dependent variables into a normal shape.  Lets check of our lambda value
+
+```{r}
+BoxCox.lambda(rio_week_train)
+```
+
+```{r}
+rio_week_train_transformed <- BoxCox(rio_week_train,lambda = -0.6006535)
+autoplot(rio_week_train_transformed)
+```
+
+#### Lets not stick with the transformation because There is very slow decay of the ACF which indicates this data is **NOT stationary**. And most of the lags are crossing the confidence boundary intervals, which show that they are not white noise.
+
+```{r}
+tsdisplay(rio_week_train_transformed)
+```
+
+### Lets apply Differencing to help stabilise the mean of a time series
+
+```{r}
+# differencing
+rio_week_train_diff <- diff(rio_week_train)
+# visulalizing
+tsdisplay(rio_week_train_diff)
+```
+
+```{r}
+kpss.test(rio_week_train_diff)
+```
+Here, p-value = 0.1  
+=> The data **is stationary**
+
+#### Lets apply the auto.arima
+
+```{r}
+auto.arima(rio_week_train, seasonal = TRUE ,lambda = 'auto')
+```
+
+#### Lets apply the ARIMA model with the same parameters given by the auto.arima function
+
+```{r}
+m2 <-Arima(rio_week_train,order=c(0,1,1), lambda = -0.6006535)
+m2
+```
+
+#### Lets forecast for the next 4 values 
+
+```{r}
+autoplot(forecast(m2,h=4))
+```
+
+```{r}
+predicted_arima = forecast(m2,h=4)
+```
+
+#### Lets check the residuals of our model
+
+```{r}
+checkresiduals(m2)
+```
+
+From the time-series of the residuals, we see that its mean = 0 => our model is not biased.
+
+From ACF plot, we see that the ACF of the residuals are almost white noise. There is no significant correlations between the residuals. This implies that our model performed well.From the histogram, we can see that the residuals are fairly normally distributed.Even the p-value for the Ljung Box Test is greater than 0.05.
+
+
+```{r}
+predicted_arima
+```
+
+```{r}
+as.array(rio_week_test)
+```
+
+#### Lets check the accuracy for the forecasted vs the test dataset
+
+```{r}
+accuracy(predicted_arima, rio_week[75:78])
+```
+
+We do notice **underfitting** in the model, this is because of the small dataset we have, and the purpose of the project was intervention analyses. 
+
+#### ETS
+
+```{r}
+rio_ets_fit <- ets(rio_week_train_diff,lambda = "auto")
+```
+
+#### Lets forecast for the next 4 values 
+
+```{r}
+plot(forecast(rio_ets_fit,h=4))
+```
+
+#### Lets check the residuals of our model
+
+```{r}
+checkresiduals(rio_ets_fit)
+```
+
+From the time-series of the residuals, we see that its mean = 0 => our model is not biased.
+
+From ACF plot, we see that the ACF of the residuals are almost white noise. There is no significant correlations between the residuals. This implies that our model performed well.From the histogram, we can see that the residuals are fairly normally distributed.Even the p-value for the Ljung Box Test is greater than 0.05.
+
+#### Lets check the accuracy for the forecasted vs the test dataset
+
+```{r}
+predicted_ets = forecast(rio_ets_fit,h=4)
+```
+
+```{r}
+accuracy(predicted_ets, rio_week[75:78])
+```
+
+We have the same conlusion as the ARIMA model, but the difference is less for the error metrics between the Train and the Test set
+
+#### ARFIMA 
+
+```{r}
+rio_arfima = arfima(rio_week_train_diff)
+```
+
+#### Lets forecast for the next 4 values 
+
+```{r}
+plot(forecast(rio_arfima,h=4))
+```
+
+#### Lets check the residuals of our model
+
+```{r}
+checkresiduals(rio_arfima)
+```
+
+From the time-series of the residuals, we see that its mean = 0 => our model is not biased.
+
+From ACF plot, we see that the ACF of the residuals are almost white noise. There is no significant correlations between the residuals. This implies that our model performed well.From the histogram, we can see that the residuals are not fairly normally distributed. So far the histogram is the 
+
+#### Lets check the accuracy for the forecasted vs the test dataset
+
+```{r}
+predicted_arfima = forecast(rio_arfima,h=4)
+```
+
+```{r}
+accuracy(predicted_arfima, rio_week[75:78])
+```
+
+Over here we have the same issue as the other two models applied
