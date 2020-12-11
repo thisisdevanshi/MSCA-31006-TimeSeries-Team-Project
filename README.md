@@ -39,12 +39,12 @@ We have used several time series in our codes. Though, for majority of them the 
 
 **Professor**: Dr. Shaddy Abado
 
-_Aakash Pahuja [aakash1@UCHICAGO.EDU](aakash1@UCHICAGO.EDU)_
+- _[Aakash Pahuja](https://www.linkedin.com/in/aakash-pahuja16/)  [aakash1@UCHICAGO.EDU](aakash1@UCHICAGO.EDU)_
 
-_Devanshi Verma [devanshi@uchicago.edu](devanshi@uchicago.edu)_
+- _[Devanshi Verma](https://www.linkedin.com/in/devanshiverma/) [devanshi@uchicago.edu](devanshi@uchicago.edu)_
 
-_Prafulla Ranjan Das [prafulladash@uchicago.edu](prafulladash@uchicago.edu)_
+- _[Prafulla Ranjan Das](https://www.linkedin.com/in/prafullardash/) [prafulladash@uchicago.edu](prafulladash@uchicago.edu)_
 
-_Surendiran Rangaraj [surendiran@UCHICAGO.EDU](surendiran@UCHICAGO.EDU)_
+- _[Surendiran Rangaraj](https://www.linkedin.com/in/surendiran-rangaraj-29463119/) [surendiran@UCHICAGO.EDU](surendiran@UCHICAGO.EDU)_
 
 Please do not hesitate to contact us, if you have any questions.
