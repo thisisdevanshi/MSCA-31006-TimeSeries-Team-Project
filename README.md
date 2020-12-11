@@ -9,7 +9,7 @@ We decided to work on one of the most burning time series problem of today’s d
 
 ## Data
 
-The training dataset consists of approximately 145k time series. Each of these time series represent a number of daily views of a different Wikipedia article, starting from July, 1st, 2015 up until December 31st, 2016. The leaderboard during the training stage is based on traffic from January, 1st, 2017 up until March 1st, 2017.
+The training dataset consists of approximately 145k time series. Each of these time series represent a number of daily views of a different Wikipedia article, starting from July, 1st, 2015 up until December 31st, 2016. 
 
 You can find the data [here](https://www.kaggle.com/c/web-traffic-time-series-forecasting/data).
 
@@ -28,9 +28,9 @@ We have used several time series in our codes. Though, for majority of them the 
 3. **ARIMA**: This code contains how you can model web traffic views using Naive, ARIMA, ETS, and TBATS model for Weighted average cost of capital wikipedia page. This also includes cross validation.
 4. **SPECTRAL ANALYSIS**: This code contains spectral analysis for legal high wikipedia page.
 5. **INTERVENTION ANALYSIS**: This code contains intevention analysis for rio olympics wikipedia page.
-6. **FREQUENCY7**: This code contains ARIMA,sARIMA,TBATS and Dynamic Harmonic Regression model for rio olympics wikipedia page.
+6. **FREQUENCY7**: This code contains ARIMA, sARIMA, TBATS and Dynamic Harmonic Regression model for rio olympics wikipedia page.
 7. **DOWNSAMPLING**: This code contains Downsampled data from daily to weekly for rio olympics wikipedia page.
-8. **ARIMA-3C-ZH*: This code contains arima and ets for 3C ZH wikipedia page.
+8. **ARIMA-3C-ZH**: This code contains ARIMA and ETS for 3C ZH wikipedia page where spikes have been replaced with mean values.
 
 
 ## Team: 
@@ -39,12 +39,12 @@ We have used several time series in our codes. Though, for majority of them the 
 
 **Professor**: Dr. Shaddy Abado
 
-_Aakash Pahuja[creimann@uchicago.edu](creimann@uchicago.edu)_
+_Aakash Pahuja [aakash1@UCHICAGO.EDU](aakash1@UCHICAGO.EDU)_
 
 _Devanshi Verma [devanshi@uchicago.edu](devanshi@uchicago.edu)_
 
 _Prafulla Ranjan Das [prafulladash@uchicago.edu](prafulladash@uchicago.edu)_
 
-_Surendiran Rangaraj[surendiran@UCHICAGO.EDU](surendiran@UCHICAGO.EDU)_
+_Surendiran Rangara j[surendiran@UCHICAGO.EDU](surendiran@UCHICAGO.EDU)_
 
 Please do not hesitate to contact us, if you have any questions.
