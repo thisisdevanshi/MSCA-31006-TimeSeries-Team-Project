@@ -30,7 +30,7 @@ We have used several time series in our codes. Though, for majority of them the 
 5. **INTERVENTION ANALYSIS**: This code contains intevention analysis for rio olympics wikipedia page.
 6. **FREQUENCY7**: This code contains ARIMA, sARIMA, TBATS and Dynamic Harmonic Regression model for rio olympics wikipedia page.
 7. **DOWNSAMPLING**: This code contains Downsampled data from daily to weekly for rio olympics wikipedia page.
-8. **ARIMA-3C-ZH**: This code contains ARIMA and ETS for 3C ZH wikipedia page where spikes have been replaced with mean values.
+8. **ARIMA-MEAN-REPLACEMENT**: This code contains ARIMA and ETS for 3C ZH wikipedia page where spikes have been replaced with mean values.
 
 
 ## Team: 
@@ -45,6 +45,6 @@ _Devanshi Verma [devanshi@uchicago.edu](devanshi@uchicago.edu)_
 
 _Prafulla Ranjan Das [prafulladash@uchicago.edu](prafulladash@uchicago.edu)_
 
-_Surendiran Rangara j[surendiran@UCHICAGO.EDU](surendiran@UCHICAGO.EDU)_
+_Surendiran Rangaraj [surendiran@UCHICAGO.EDU](surendiran@UCHICAGO.EDU)_
 
 Please do not hesitate to contact us, if you have any questions.
